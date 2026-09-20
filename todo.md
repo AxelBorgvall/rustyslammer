@@ -1,6 +1,6 @@
 
 # declarations
-1. Sketch out trait and data for SimEnv
+1. Sketch out trait and data for SimEnv (DONE)
 2. Sketch out trait and data for BasicController
 3. Sketch out data for Runner
 

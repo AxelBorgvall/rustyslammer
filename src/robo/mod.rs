@@ -23,12 +23,11 @@ pub type Map=HashMap<(i32,i32),Arc<Chunk>>;
 #[derive(Clone)]
 struct LidarScan {
 	pub ranges:Vec<f32>,
-	pub angels:Vec<f32>,
+	pub angles:Vec<f32>,
 	pub max_distance: f32,
 }
 
 /* ----------------------------- Define ImuState ---------------------------- */
-
 #[derive(Clone,Copy)]
 struct ImuState {
 	x:f32,
@@ -41,4 +40,11 @@ impl Default for ImuState{
 			x:0.0,y:0.0,theta:0.0
 		}
 	}
+}
+
+/* --------------------------- define Controlinput -------------------------- */
+#[derive(Clone,Copy)]
+struct TwoWheelControl{
+	v_r:f32,
+	om_r:f32,
 }

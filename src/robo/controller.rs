@@ -4,7 +4,7 @@ use arc_swap::{ArcSwap};
 
 
 pub trait Controller: Send {
-    fn spawn(&self, lidar_out:ArcSwap<LidarScan>);
+    fn spawn(&self, lidar_in:ArcSwap<LidarScan>);
 }
 
 pub struct BasicController {
@@ -12,6 +12,8 @@ pub struct BasicController {
 	pub angvel:f32,
 	pub reactrange:f32,
 	pub k:f32,
-
 }
 
+impl BasicController{
+	
+}
