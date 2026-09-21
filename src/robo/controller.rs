@@ -8,7 +8,7 @@ use std::{
 };
 
 pub trait Controller: Send {
-    fn spawn(&self, lidar_in: ArcSwap<LidarScan>);
+    fn spawn(&self, lidar_in: ArcSwap<LidarScan>,map_in:ArcSwap<Map>);
 }
 
 pub struct BasicController {
@@ -48,4 +48,11 @@ impl BasicController {
             om_r: omega,
         }
     }
+}
+
+impl Controller for BasicController{
+	fn spawn(&self, lidar_in: ArcSwap<LidarScan>,map_in:ArcSwap<Map>) {
+		
+	}
+	
 }
