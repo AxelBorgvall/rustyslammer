@@ -88,8 +88,11 @@ pub struct SimEnv {
 }
 
 fn checkaround(grid: &Vec<bool>, nh: usize, nw: usize, x: usize, y: usize, rad: usize) -> bool {
-    if (x < rad || y < rad || x > (nw - rad - 1) || y > (nh - rad - 1)) {
-        true;
+    if (x + rad + 1 > nw) || (y + rad + 1 > nh) {
+        return true;
+    }
+    if (x < rad || y < rad) {
+        return true;
     }
     for i in x - rad..x + rad {
         for j in y - rad..y + rad {

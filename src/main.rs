@@ -1,4 +1,5 @@
 mod robo;
 fn main() {
-    println!("Hello, world!");
+	robo::environment::SimEnv::new("data/map1.dat");
+
 }
