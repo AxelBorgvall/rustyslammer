@@ -4,11 +4,16 @@ use std::{
     collections::HashMap,
     f32::consts::PI,
     sync::{Arc, RwLock, atomic::AtomicBool},
-    thread,
+    thread::{self, JoinHandle},
 };
 
 pub trait Controller: Send {
-    fn spawn(&self, lidar_in: ArcSwap<LidarScan>,map_in:ArcSwap<Map>);
+    fn spawn(
+        &self,
+        shutdown_flag: Arc<AtomicBool>,
+        lidar_in: Arc<ArcSwap<LidarScan>>,
+        map_in: Arc<ArcSwap<Map>>,
+    ) -> JoinHandle<()>;
 }
 
 pub struct BasicController {
@@ -27,7 +32,9 @@ impl BasicController {
         let max_dist = scan.max_distance - 0.1;
 
         for (&angle, &range) in scan.angles.iter().zip(scan.ranges.iter()) {
-            if range > max_dist || angle.abs() > PI { continue; }
+            if range > max_dist || angle.abs() > PI {
+                continue;
+            }
 
             let mag = self.k / (range.powi(2) + 0.01);
             fx += mag * angle.cos();
@@ -50,9 +57,15 @@ impl BasicController {
     }
 }
 
-impl Controller for BasicController{
-	fn spawn(&self, lidar_in: ArcSwap<LidarScan>,map_in:ArcSwap<Map>) {
-		
-	}
-	
+impl Controller for BasicController {
+    fn spawn(
+        &self,
+        shutdown_flag: Arc<AtomicBool>,
+        lidar_in: Arc<ArcSwap<LidarScan>>,
+        map_in: Arc<ArcSwap<Map>>,
+    ) -> JoinHandle<()> {
+        thread::spawn(move || {
+            // Basic Slam loop goes here
+        })
+    }
 }

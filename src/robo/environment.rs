@@ -2,6 +2,8 @@ use crate::robo::{ImuState, LidarScan, Map, TwoWheelControl};
 use arc_swap::ArcSwap;
 use std::fs::File;
 use std::io::{self, BufReader, BufWriter, Read, Write};
+use std::net::Shutdown;
+use std::thread::JoinHandle;
 use std::{
     collections::HashMap,
     f32::consts::PI,
@@ -55,7 +57,12 @@ pub fn load_data(path: &str) -> io::Result<(u32, u32, f32, Vec<bool>)> {
 }
 
 pub trait Environment: Send {
-    fn spawn(&self, lidar_out: ArcSwap<LidarScan>, control_in: Arc<RwLock<TwoWheelControl>>);
+    fn spawn(
+        &self,
+        shutdown_flag: Arc<AtomicBool>,
+        lidar_out: Arc<ArcSwap<LidarScan>>,
+        control_in: Arc<RwLock<TwoWheelControl>>,
+    ) -> JoinHandle<()>;
 }
 
 pub struct SimEnv {
@@ -115,30 +122,53 @@ impl SimEnv {
             }
         }
         if (x < 0.0 || y < 0.0) {
-            panic!("We could find a place for the robo. Sorry :(")
+            panic!("We could not find a place for the robo. Sorry :(")
         };
 
         let nrays = 360;
         let spread = 2.0 * PI;
-		let nrays_f = nrays as f32;
-		let half_spread = spread / 2.0;
-		let angles: Vec<f32> = (0..nrays)
-			.map(|i| (i as f32) / (nrays_f-1.0) * spread - half_spread)
-			.collect();
-		
-		Self { n_rays: nrays, max_range: 8.0, spread:spread, speed: 0.2, angvel: 0.2, angles:angles, x, y, theta: theta, nh, nw, H: ((nh as f32)/dx), W: ((nw as f32)/dx), dx, grid }
-    }
-	
-	pub fn lidarscan(&self)->LidarScan{
-		LidarScan{ranges:vec![],angles:vec![],max_distance:self.max_range}
-	}
-	pub fn step_fwd(&mut self,dt:f32){
+        let nrays_f = nrays as f32;
+        let half_spread = spread / 2.0;
+        let angles: Vec<f32> = (0..nrays)
+            .map(|i| (i as f32) / (nrays_f - 1.0) * spread - half_spread)
+            .collect();
 
-	}
+        Self {
+            n_rays: nrays,
+            max_range: 8.0,
+            spread: spread,
+            speed: 0.2,
+            angvel: 0.2,
+            angles: angles,
+            x,
+            y,
+            theta: theta,
+            nh,
+            nw,
+            H: ((nh as f32) / dx),
+            W: ((nw as f32) / dx),
+            dx,
+            grid,
+        }
+    }
+
+    pub fn lidarscan(&self) -> LidarScan {
+        LidarScan {
+            ranges: vec![],
+            angles: vec![],
+            max_distance: self.max_range,
+        }
+    }
+    pub fn step_fwd(&mut self, dt: f32) {}
 }
 
 impl Environment for SimEnv {
-	fn spawn(&self, lidar_out: ArcSwap<LidarScan>, control_in: Arc<RwLock<TwoWheelControl>>) {
-		
-	}
+    fn spawn(
+        &self,
+        shutdown_flag: Arc<AtomicBool>,
+        lidar_out: Arc<ArcSwap<LidarScan>>,
+        control_in: Arc<RwLock<TwoWheelControl>>,
+    ) -> JoinHandle<()> {
+        thread::spawn(move || {})
+    }
 }

@@ -1,15 +1,25 @@
 use crate::robo::{ImuState, LidarScan, Map};
-use std::{collections::HashMap, sync::{Arc, RwLock, atomic::AtomicBool}, thread};
-use arc_swap::{ArcSwap};
+use arc_swap::ArcSwap;
+use std::{
+    collections::HashMap,
+    sync::{Arc, RwLock, atomic::AtomicBool},
+    thread::{self, JoinHandle},
+};
 
 /* --------------------------------- Config --------------------------------- */
 
 pub trait Slam: Send {
-    fn spawn(&self,shutdown_flag:Arc<AtomicBool>, imu_in:Arc<RwLock<ImuState>>, lidar_in: ArcSwap<LidarScan>,map_out:ArcSwap<Map>);
+    fn spawn(
+        &self,
+        shutdown_flag: Arc<AtomicBool>,
+        imu_in: Arc<RwLock<ImuState>>,
+        lidar_in: Arc<ArcSwap<LidarScan>>,
+        map_out: Arc<ArcSwap<Map>>,
+    ) -> JoinHandle<()>;
 }
 
 pub struct GMapping {
-	// Params
+    // Params
     pub dx: f32,
     pub resampling_temp: f32,
     pub n_part: usize,
@@ -19,22 +29,21 @@ pub struct GMapping {
     pub l_free: f32,
     pub l_occ: f32,
 
-	// Scanmatch search params
+    // Scanmatch search params
     pub xy_step: f32,
     pub n_xy_steps: i32,
     pub th_step: f32,
     pub n_th_steps: i32,
 
-	// State
+    // State
     pub weights: Vec<f32>,
-	pub particles: Vec<ImuState>,
+    pub particles: Vec<ImuState>,
     pub particle_maps: Vec<Map>,
-	pub last_imu:ImuState,
-
+    pub last_imu: ImuState,
 }
 
 impl GMapping {
-    pub fn new(n_part: usize,dx:f32) -> Self {
+    pub fn new(n_part: usize, dx: f32) -> Self {
         Self {
             dx: dx,
             resampling_temp: 8.0,
@@ -53,16 +62,21 @@ impl GMapping {
             particles: vec![ImuState::default(); n_part],
             particle_maps: vec![],
             weights: vec![1.0; n_part],
-			last_imu:ImuState::default(),
+            last_imu: ImuState::default(),
         }
     }
 }
 
-
 impl Slam for GMapping {
-	fn spawn(&self,shutdown_flag:Arc<AtomicBool>, imu_in:Arc<RwLock<ImuState>>, lidar_in: ArcSwap<LidarScan>,map_out:ArcSwap<Map>){
-		thread::spawn(move || {
-			// Basic Slam loop goes here
-		});
-	}
+    fn spawn(
+        &self,
+        shutdown_flag: Arc<AtomicBool>,
+        imu_in: Arc<RwLock<ImuState>>,
+        lidar_in: Arc<ArcSwap<LidarScan>>,
+        map_out: Arc<ArcSwap<Map>>,
+    ) -> JoinHandle<()> {
+        thread::spawn(move || {
+            // Basic Slam loop goes here
+        })
+    }
 }
