@@ -40,6 +40,9 @@ pub struct GMapping {
     pub particles: Vec<ImuState>,
     pub particle_maps: Vec<Map>,
     pub last_imu: ImuState,
+	
+	// BUffers
+
 }
 
 impl GMapping {

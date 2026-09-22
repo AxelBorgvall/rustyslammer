@@ -5,7 +5,9 @@
 3. Sketch out data for Runner (DONE)
 
 # definitions
-1. Sketch out impl for GMapping
-2. Sketch out impl for SimEnv
-3. Sketch out impl for BasicController
-4. Write launch for Runner
+0. Make a SimEnv
+1. Write SimEnv
+2. Write BasicController
+3. Write SleepySlam
+4. Add display functionality
+5. Test simulation

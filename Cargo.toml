@@ -5,4 +5,5 @@ edition = "2024"
 
 [dependencies]
 rayon="1.8"
+minifb = "0.27"
 arc-swap = "1"

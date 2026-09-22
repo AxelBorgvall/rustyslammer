@@ -16,6 +16,13 @@ const CHUNK_SIZE: usize = CHUNK_L * CHUNK_L;
 pub type Chunk = [f32; CHUNK_SIZE];
 pub type Map = HashMap<(i32, i32), Arc<Chunk>>;
 
+struct MapQuery {
+	chunk_coord:(i32,i32),
+	localx:u16,
+	localy:u16,
+	prop_id:u32,
+}
+
 /* --------------------------- Define lidar state --------------------------- */
 #[derive(Clone)]
 struct LidarScan {
