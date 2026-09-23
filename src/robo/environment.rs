@@ -1,4 +1,4 @@
-use crate::robo::{ImuState, LidarScan, Map, TwoWheelControl};
+use crate::robo::{EnvImage, ImuState, LidarScan, Map, TwoWheelControl};
 use arc_swap::ArcSwap;
 use std::fs::File;
 use std::io::{self, BufReader, BufWriter, Read, Write};
@@ -62,6 +62,7 @@ pub trait Environment: Send {
         shutdown_flag: Arc<AtomicBool>,
         lidar_out: Arc<ArcSwap<LidarScan>>,
         control_in: Arc<RwLock<TwoWheelControl>>,
+        img_out: Option<Arc<ArcSwap<EnvImage>>>,
     ) -> JoinHandle<()>;
 }
 
@@ -87,6 +88,7 @@ pub struct SimEnv {
     pub grid: Vec<bool>,
 }
 
+/* ------------------------------ Helper funcs ------------------------------ */
 fn checkaround(grid: &Vec<bool>, nh: usize, nw: usize, x: usize, y: usize, rad: usize) -> bool {
     if (x + rad + 1 > nw) || (y + rad + 1 > nh) {
         return true;
@@ -103,6 +105,7 @@ fn checkaround(grid: &Vec<bool>, nh: usize, nw: usize, x: usize, y: usize, rad: 
     }
     false
 }
+
 impl SimEnv {
     pub fn new(path: &str) -> Self {
         let (nh, nw, dx, grid) =
@@ -162,6 +165,7 @@ impl SimEnv {
             max_distance: self.max_range,
         }
     }
+
     pub fn step_fwd(&mut self, dt: f32) {}
 }
 
@@ -171,6 +175,7 @@ impl Environment for SimEnv {
         shutdown_flag: Arc<AtomicBool>,
         lidar_out: Arc<ArcSwap<LidarScan>>,
         control_in: Arc<RwLock<TwoWheelControl>>,
+        img_out: Option<Arc<ArcSwap<EnvImage>>>,
     ) -> JoinHandle<()> {
         thread::spawn(move || {})
     }

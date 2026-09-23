@@ -71,3 +71,31 @@ impl Default for TwoWheelControl {
         }
     }
 }
+
+/* ------------------------- define screen/rendering ------------------------ */
+
+struct EnvImage {
+	height:usize,
+	width:usize,
+	data:Vec<u32>
+}
+
+impl Default for EnvImage{
+	fn default() -> Self {
+		Self { height: 0, width: 0, data: vec![] }
+	}
+}
+
+struct SlamImage {
+	height:usize,
+	width:usize,
+	data:Vec<u32>
+}
+
+impl Default for SlamImage{
+	fn default() -> Self {
+		Self { height: 0, width: 0, data: vec![] }
+	}
+}
+
+

@@ -1,4 +1,4 @@
-use crate::robo::{ImuState, LidarScan, Map};
+use crate::robo::{ImuState, LidarScan, Map, SlamImage};
 use arc_swap::ArcSwap;
 use std::{
     collections::HashMap,
@@ -15,6 +15,7 @@ pub trait Slam: Send {
         imu_in: Arc<RwLock<ImuState>>,
         lidar_in: Arc<ArcSwap<LidarScan>>,
         map_out: Arc<ArcSwap<Map>>,
+		img_out: Option<Arc<ArcSwap<SlamImage>>>,
     ) -> JoinHandle<()>;
 }
 
@@ -77,6 +78,7 @@ impl Slam for GMapping {
         imu_in: Arc<RwLock<ImuState>>,
         lidar_in: Arc<ArcSwap<LidarScan>>,
         map_out: Arc<ArcSwap<Map>>,
+		img_out: Option<Arc<ArcSwap<SlamImage>>>,
     ) -> JoinHandle<()> {
         thread::spawn(move || {
             // Basic Slam loop goes here
