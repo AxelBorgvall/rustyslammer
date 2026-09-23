@@ -86,6 +86,9 @@ pub struct SimEnv {
     pub W: f32,
     pub dx: f32,
     pub grid: Vec<bool>,
+
+    // Buffers
+    distbuffer: Vec<f32>,
 }
 
 /* ------------------------------ Helper funcs ------------------------------ */
@@ -155,10 +158,77 @@ impl SimEnv {
             W: ((nw as f32) / dx),
             dx,
             grid,
+            distbuffer: vec![0.0; nrays as usize],
         }
     }
 
-    pub fn lidarscan(&self) -> LidarScan {
+    pub fn lidarscan(&mut self) -> LidarScan {
+        let rx = self.x;
+        let ry = self.y;
+        let rtheta = self.theta;
+
+        let start_x = (rx / self.dx) as i32;
+        let start_y = (ry / self.dx) as i32;
+
+        let width = self.nw as i32;
+        let height = self.nh as i32;
+        // Run bresenham for every ray
+        for i in 0..self.n_rays as usize {
+            let mut x0 = start_x;
+            let mut y0 = start_y;
+            let ray_angle = rtheta + self.angles[i];
+            let end_x_f = rx + self.max_range * ray_angle.cos();
+            let end_y_f = ry + self.max_range * ray_angle.sin();
+
+            let end_x = (end_x_f / self.dx) as i32;
+            let end_y = (end_y_f / self.dx) as i32;
+
+            let delta_x = (start_x - end_x).abs();
+            let delta_y = -(start_y - end_y).abs();
+            let sx = (start_x - end_x).signum();
+            let sy = -(start_y - end_y).signum();
+            let mut err = delta_x + delta_y;
+
+            loop {
+				// Register hits or OOB
+                if x0 < 0 || x0 >= width || y0 < 0 || y0 >= height {
+                    self.distbuffer[i] = self.max_range;
+                    break;
+                }
+                if self.grid[(y0 * width + x0) as usize] {
+                    let hit_x_f = (x0 as f32 * self.dx) + (self.dx / 2.0);
+                    let hit_y_f = (x0 as f32 * self.dx) + (self.dx / 2.0);
+                    let dist = ((hit_x_f - rx).powi(2) + (hit_x_f - rx).powi(2)).sqrt();
+                    self.distbuffer[i] = dist.min(self.max_range);
+                    break;
+                }
+				
+				if x0==start_x && y0==start_y{
+					self.distbuffer[i]= self.max_range;
+				}
+				
+				// step forward
+				let e2=2*err;
+				if e2>delta_y{
+					if x0==end_x{
+						self.distbuffer[i]=self.max_range;
+						break;
+					}
+					err+=delta_y;
+					x0+=sx;
+				}
+				if e2>delta_x{
+					if y0==end_y{
+						self.distbuffer[i]=self.max_range;
+						break;
+					}
+					err+=delta_x;
+					y0+=sy;
+				}
+
+            }
+        }
+
         LidarScan {
             ranges: vec![],
             angles: vec![],
