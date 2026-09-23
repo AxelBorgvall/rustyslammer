@@ -2,6 +2,9 @@ pub mod controller;
 pub mod environment;
 pub mod runner;
 pub mod slam;
+pub mod io;
+pub mod bresenham;
+
 
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};

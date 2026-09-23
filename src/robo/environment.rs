@@ -1,7 +1,5 @@
-use crate::robo::{EnvImage, ImuState, LidarScan, Map, TwoWheelControl};
+use crate::robo::{EnvImage, ImuState, LidarScan, Map, TwoWheelControl, bresenham::Bresenham, io};
 use arc_swap::ArcSwap;
-use std::fs::File;
-use std::io::{self, BufReader, BufWriter, Read, Write};
 use std::net::Shutdown;
 use std::thread::JoinHandle;
 use std::{
@@ -10,51 +8,6 @@ use std::{
     sync::{Arc, RwLock, atomic::AtomicBool},
     thread,
 };
-
-pub fn save_grid(path: &str, height: u32, width: u32, dx: f32, data: &[bool]) -> io::Result<()> {
-    let file = File::create(path)?;
-    let mut writer = BufWriter::new(file);
-
-    writer.write_all(&height.to_le_bytes())?;
-    writer.write_all(&width.to_le_bytes())?;
-    writer.write_all(&dx.to_le_bytes())?;
-    let len = data.len() as u64;
-    writer.write_all(&len.to_le_bytes())?;
-
-    for &val in data {
-        writer.write_all(&[val as u8])?;
-    }
-    Ok(())
-}
-
-pub fn load_data(path: &str) -> io::Result<(u32, u32, f32, Vec<bool>)> {
-    let file = File::open(path)?;
-    let mut reader = BufReader::new(file);
-    let mut buf_4 = [0u8; 4];
-    let mut buf_8 = [0u8; 8];
-
-    reader.read_exact(&mut buf_4)?;
-    let height = u32::from_le_bytes(buf_4);
-
-    reader.read_exact(&mut buf_4)?;
-    let width = u32::from_le_bytes(buf_4);
-
-    reader.read_exact(&mut buf_4)?;
-    let dx = f32::from_le_bytes(buf_4);
-
-    reader.read_exact(&mut buf_8)?;
-    let len = u64::from_le_bytes(buf_8) as usize;
-
-    let mut data = Vec::with_capacity(len);
-    let mut buf_1 = [0u8; 1]; // Buffer for reading 1 byte at a time
-
-    for _ in 0..len {
-        reader.read_exact(&mut buf_1)?;
-        data.push(buf_1[0] != 0);
-    }
-
-    Ok((height, width, dx, data))
-}
 
 pub trait Environment: Send {
     fn spawn(
@@ -112,7 +65,7 @@ fn checkaround(grid: &Vec<bool>, nh: usize, nw: usize, x: usize, y: usize, rad: 
 impl SimEnv {
     pub fn new(path: &str) -> Self {
         let (nh, nw, dx, grid) =
-            load_data(path).expect("Failed to load the Map from the path specified.");
+            io::load_data(path).expect("Failed to load the Map from the path specified.");
         let nh = nh as usize;
         let nw = nw as usize;
 
@@ -161,77 +114,37 @@ impl SimEnv {
             distbuffer: vec![0.0; nrays as usize],
         }
     }
-
-    pub fn lidarscan(&mut self) -> LidarScan {
-        let rx = self.x;
-        let ry = self.y;
-        let rtheta = self.theta;
-
+    fn cast_ray(&self, rx: f32, ry: f32, ray_angle: f32) -> f32 {
         let start_x = (rx / self.dx) as i32;
         let start_y = (ry / self.dx) as i32;
+        let end_x = ((rx + self.max_range * ray_angle.cos()) / self.dx) as i32;
+        let end_y = ((ry + self.max_range * ray_angle.sin()) / self.dx) as i32;
 
-        let width = self.nw as i32;
-        let height = self.nh as i32;
-        // Run bresenham for every ray
-        for i in 0..self.n_rays as usize {
-            let mut x0 = start_x;
-            let mut y0 = start_y;
-            let ray_angle = rtheta + self.angles[i];
-            let end_x_f = rx + self.max_range * ray_angle.cos();
-            let end_y_f = ry + self.max_range * ray_angle.sin();
+        for (x, y) in Bresenham::new(start_x, start_y, end_x, end_y) {
+            if x < 0 || x >= self.nw as i32 || y < 0 || y >= self.nh as i32 {
+                return self.max_range;
+            }
 
-            let end_x = (end_x_f / self.dx) as i32;
-            let end_y = (end_y_f / self.dx) as i32;
-
-            let delta_x = (start_x - end_x).abs();
-            let delta_y = -(start_y - end_y).abs();
-            let sx = (start_x - end_x).signum();
-            let sy = -(start_y - end_y).signum();
-            let mut err = delta_x + delta_y;
-
-            loop {
-				// Register hits or OOB
-                if x0 < 0 || x0 >= width || y0 < 0 || y0 >= height {
-                    self.distbuffer[i] = self.max_range;
-                    break;
-                }
-                if self.grid[(y0 * width + x0) as usize] {
-                    let hit_x_f = (x0 as f32 * self.dx) + (self.dx / 2.0);
-                    let hit_y_f = (x0 as f32 * self.dx) + (self.dx / 2.0);
-                    let dist = ((hit_x_f - rx).powi(2) + (hit_x_f - rx).powi(2)).sqrt();
-                    self.distbuffer[i] = dist.min(self.max_range);
-                    break;
-                }
-				
-				if x0==start_x && y0==start_y{
-					self.distbuffer[i]= self.max_range;
-				}
-				
-				// step forward
-				let e2=2*err;
-				if e2>delta_y{
-					if x0==end_x{
-						self.distbuffer[i]=self.max_range;
-						break;
-					}
-					err+=delta_y;
-					x0+=sx;
-				}
-				if e2>delta_x{
-					if y0==end_y{
-						self.distbuffer[i]=self.max_range;
-						break;
-					}
-					err+=delta_x;
-					y0+=sy;
-				}
-
+            if self.grid[(y * self.nw as i32 + x) as usize] {
+                let hit_x = (x as f32 * self.dx) + (self.dx / 2.0);
+                let hit_y = (y as f32 * self.dx) + (self.dx / 2.0);
+                let dist = ((hit_x - rx).powi(2) + (hit_y - ry).powi(2)).sqrt();
+                return dist.min(self.max_range);
             }
         }
 
+        self.max_range
+    }
+    pub fn lidarscan(&self) -> LidarScan {
+        let ranges: Vec<f32> = self
+            .angles
+            .iter()
+            .map(|&angle| self.cast_ray(self.x, self.y, self.theta + angle))
+            .collect();
+
         LidarScan {
-            ranges: vec![],
-            angles: vec![],
+            ranges,
+            angles: self.angles.clone(),
             max_distance: self.max_range,
         }
     }
