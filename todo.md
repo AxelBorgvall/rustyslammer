@@ -5,9 +5,9 @@
 3. Sketch out data for Runner (DONE)
 
 # definitions
-0. Make a SimEnv
+0. Make a SimEnv (DONE)
 1. Write SimEnv
 2. Write BasicController
 3. Write SleepySlam
-4. Add display functionality
+4. Add display functionality (done)
 5. Test simulation

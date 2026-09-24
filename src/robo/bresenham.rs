@@ -1,3 +1,4 @@
+#[derive(Clone)]
 pub struct Bresenham {
     x: i32, y: i32,
     end_x: i32, end_y: i32,

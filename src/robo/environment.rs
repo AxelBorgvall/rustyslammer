@@ -1,5 +1,6 @@
 use crate::robo::{EnvImage, ImuState, LidarScan, Map, TwoWheelControl, bresenham::Bresenham, io};
 use arc_swap::ArcSwap;
+use minifb::Key::Y;
 use std::net::Shutdown;
 use std::thread::JoinHandle;
 use std::{
@@ -28,9 +29,12 @@ pub struct SimEnv {
     pub angvel: f32,
     pub angles: Vec<f32>,
 
+    // Pose
     pub x: f32,
     pub y: f32,
     pub theta: f32,
+    pub v: f32,
+    pub om: f32,
 
     // Map
     pub nh: usize,
@@ -40,8 +44,12 @@ pub struct SimEnv {
     pub dx: f32,
     pub grid: Vec<bool>,
 
-    // Buffers
-    distbuffer: Vec<f32>,
+    // Speed
+    pub dt: f32,
+    pub seconds_per_iter: f32,
+
+    // buffers
+    pub screenbuffer: Vec<u32>,
 }
 
 /* ------------------------------ Helper funcs ------------------------------ */
@@ -105,15 +113,27 @@ impl SimEnv {
             x,
             y,
             theta: theta,
+            om: 0.0,
+            v: 0.0,
             nh,
             nw,
             H: ((nh as f32) / dx),
             W: ((nw as f32) / dx),
             dx,
             grid,
-            distbuffer: vec![0.0; nrays as usize],
+            dt: 0.02,
+            seconds_per_iter: 0.2,
+            screenbuffer: vec![0; nh * nw],
         }
     }
+    fn real2idx(&self, x: f32) -> i32 {
+        return (x / self.dx) as i32;
+    }
+    fn idx2real(&self, x: i32) -> f32 {
+        return x as f32 * self.dx;
+    }
+
+    // Lidar simualtion
     fn cast_ray(&self, rx: f32, ry: f32, ray_angle: f32) -> f32 {
         let start_x = (rx / self.dx) as i32;
         let start_y = (ry / self.dx) as i32;
@@ -149,7 +169,33 @@ impl SimEnv {
         }
     }
 
-    pub fn step_fwd(&mut self, dt: f32) {}
+    // Kinematics
+    pub fn step_fwd(&mut self, input: TwoWheelControl) {
+        self.v += (2.0) * (input.v_r.min(self.speed) - self.v) * self.dt;
+        self.om += (2.0) * (input.om_r.min(self.angvel) - self.om) * self.dt;
+
+        let x_prime = self.x + self.v * self.theta.cos() * self.dt;
+        let y_prime = self.y + self.v * self.theta.sin() * self.dt;
+
+        let mut path = Bresenham::new(
+            self.real2idx(self.x),
+            self.real2idx(self.y),
+            self.real2idx(x_prime),
+            self.real2idx(y_prime),
+        );
+
+        let mut target = (self.real2idx(self.x), self.real2idx(self.y));
+        for (x, y) in path {
+            target = (x, y);
+            if self.grid[(x + y * self.nh as i32) as usize] {
+                break;
+            }
+        }
+        self.x = self.idx2real(target.0);
+        self.y = self.idx2real(target.1);
+        self.theta += self.om * self.dt;
+    }
+    pub fn render(&mut self) {}
 }
 
 impl Environment for SimEnv {
