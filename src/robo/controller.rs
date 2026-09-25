@@ -9,7 +9,7 @@ use std::{
 
 pub trait Controller: Send {
     fn spawn(
-        &self,
+        self,
         shutdown_flag: Arc<AtomicBool>,
         lidar_in: Arc<ArcSwap<LidarScan>>,
         map_in: Arc<ArcSwap<Map>>,
@@ -21,6 +21,17 @@ pub struct BasicController {
     pub angvel: f32,
     pub reactrange: f32,
     pub k: f32,
+}
+
+impl Default for BasicController {
+    fn default() -> Self {
+        Self {
+            speed: 0.2,
+            angvel: 0.2,
+            reactrange: 2.0,
+            k: 1.0,
+        }
+    }
 }
 
 impl BasicController {
@@ -59,7 +70,7 @@ impl BasicController {
 
 impl Controller for BasicController {
     fn spawn(
-        &self,
+        self,
         shutdown_flag: Arc<AtomicBool>,
         lidar_in: Arc<ArcSwap<LidarScan>>,
         map_in: Arc<ArcSwap<Map>>,

@@ -2,7 +2,9 @@ use crate::robo::{EnvImage, ImuState, LidarScan, Map, TwoWheelControl, bresenham
 use arc_swap::ArcSwap;
 use minifb::Key::Y;
 use std::net::Shutdown;
+use std::sync::atomic::Ordering::Relaxed;
 use std::thread::JoinHandle;
+use std::time::Duration;
 use std::{
     collections::HashMap,
     f32::consts::PI,
@@ -12,7 +14,7 @@ use std::{
 
 pub trait Environment: Send {
     fn spawn(
-        &self,
+        self,
         shutdown_flag: Arc<AtomicBool>,
         lidar_out: Arc<ArcSwap<LidarScan>>,
         control_in: Arc<RwLock<TwoWheelControl>>,
@@ -195,17 +197,81 @@ impl SimEnv {
         self.y = self.idx2real(target.1);
         self.theta += self.om * self.dt;
     }
-    pub fn render(&mut self) {}
+    pub fn render(&mut self) {
+        for (pixel, &is_wall) in self.screenbuffer.iter_mut().zip(self.grid.iter()) {
+            *pixel = if is_wall { 0x00000000 } else { 0xFFFFFFFF };
+        }
+
+        let cx = self.real2idx(self.x) as usize;
+        let cy = self.real2idx(self.y) as usize;
+        let xrange = cx.saturating_sub(2)..(cx + 2).min(self.nw);
+        let yrange = cy.saturating_sub(2)..(cy + 2).min(self.nh);
+
+        for y in yrange {
+            for x in xrange.clone() {
+                self.screenbuffer[x + y * self.nw] = 0x00FF0000;
+            }
+        }
+
+        let x_offset = self.real2idx(self.x + self.theta.cos() * 6.0 * self.dx);
+        let y_offset = self.real2idx(self.y + self.theta.sin() * 6.0 * self.dx);
+        let nose = Bresenham::new(
+            self.real2idx(self.x),
+            self.real2idx(self.y),
+            x_offset,
+            y_offset,
+        );
+
+        for (x, y) in nose {
+            let x = x as usize;
+            let y = y as usize;
+            self.screenbuffer[x + y * self.nw] = 0x000000FF;
+        }
+    }
 }
 
 impl Environment for SimEnv {
     fn spawn(
-        &self,
+        mut self,
         shutdown_flag: Arc<AtomicBool>,
         lidar_out: Arc<ArcSwap<LidarScan>>,
         control_in: Arc<RwLock<TwoWheelControl>>,
         img_out: Option<Arc<ArcSwap<EnvImage>>>,
     ) -> JoinHandle<()> {
-        thread::spawn(move || {})
+        thread::spawn(move || {
+            // Main simulation loop
+            while !shutdown_flag.load(Relaxed) {
+                let current_control = {
+                    let guard = control_in.read().unwrap();
+                    *guard
+                };
+                self.step_fwd(current_control);
+
+				// Publish lidardata
+                let scan = self.lidarscan();
+                lidar_out.store(Arc::new(scan));
+				
+				// Publish environment render
+                self.render();
+                if let Some(mailbox) = &img_out {
+                    let current_buffer = std::mem::take(&mut self.screenbuffer);
+                    let new_frame = Arc::new(EnvImage {
+                        data: current_buffer,
+                        width: self.nw,
+                        height: self.nh,
+                    });
+
+                    let old_frame_arc = mailbox.swap(new_frame);
+                    match Arc::try_unwrap(old_frame_arc) {
+                        Ok(old_frame) => {
+                            self.screenbuffer = old_frame.data;
+                        }
+                        Err(_) => {
+                            self.screenbuffer = vec![0; self.nw * self.nh];
+                        }
+                    }
+                }
+            }
+        })
     }
 }

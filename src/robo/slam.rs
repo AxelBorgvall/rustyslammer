@@ -10,7 +10,7 @@ use std::{
 
 pub trait Slam: Send {
     fn spawn(
-        &self,
+        self,
         shutdown_flag: Arc<AtomicBool>,
         imu_in: Arc<RwLock<ImuState>>,
         lidar_in: Arc<ArcSwap<LidarScan>>,
@@ -73,7 +73,7 @@ impl GMapping {
 
 impl Slam for GMapping {
     fn spawn(
-        &self,
+        self,
         shutdown_flag: Arc<AtomicBool>,
         imu_in: Arc<RwLock<ImuState>>,
         lidar_in: Arc<ArcSwap<LidarScan>>,

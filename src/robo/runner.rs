@@ -58,7 +58,7 @@ fn fit_to_canvas(
 }
 
 /* -------------------------- Runner implementation ------------------------- */
-struct SimRunner<E: Environment, S: Slam, C: Controller> {
+pub struct SimRunner<E: Environment, S: Slam, C: Controller> {
     environment: E,
     slam: S,
     controller: C,
@@ -66,9 +66,9 @@ struct SimRunner<E: Environment, S: Slam, C: Controller> {
 
 impl<E, S, C> SimRunner<E, S, C>
 where
-    E: Environment,
-    S: Slam,
-    C: Controller,
+    E: Environment+Send+'static,
+    S: Slam+Send+'static,
+    C: Controller+Send+'static,
 {
     pub fn new(environment: E, slam: S, controller: C) -> Self {
         Self {
@@ -78,14 +78,14 @@ where
         }
     }
 
-    pub fn start(&self) {
+    pub fn start(self) {
         // Set up mailboxes
-        let mut shutdown_flag: Arc<AtomicBool> = Arc::new(AtomicBool::new(false));
-        let mut imu_mailbox: Arc<RwLock<ImuState>> = Arc::new(RwLock::new(ImuState::default()));
-        let mut lidarscan_mailbox: Arc<ArcSwap<LidarScan>> =
+        let shutdown_flag: Arc<AtomicBool> = Arc::new(AtomicBool::new(false));
+        let imu_mailbox: Arc<RwLock<ImuState>> = Arc::new(RwLock::new(ImuState::default()));
+        let lidarscan_mailbox: Arc<ArcSwap<LidarScan>> =
             Arc::new(ArcSwap::new(Arc::new(LidarScan::default())));
-        let mut map_mailbox: Arc<ArcSwap<Map>> = Arc::new(ArcSwap::new(Arc::new(Map::new())));
-        let mut control_mailbox: Arc<RwLock<TwoWheelControl>> =
+        let map_mailbox: Arc<ArcSwap<Map>> = Arc::new(ArcSwap::new(Arc::new(Map::new())));
+        let control_mailbox: Arc<RwLock<TwoWheelControl>> =
             Arc::new(RwLock::new(TwoWheelControl::default()));
 
         let env_render_mailbox = Arc::new(ArcSwap::new(Arc::new(EnvImage::default())));
@@ -119,7 +119,8 @@ where
             WindowOptions::default(),
         )
         .expect("Failed to create window");
-        window.limit_update_rate(Some(Duration::from_micros(50_000)));
+        // window.limit_update_rate(Some(Duration::from_micros(50_000)));
+		window.set_target_fps(20);
         let mut combined_buffer = vec![0u32; WINDOW_WIDTH * WINDOW_HEIGHT];
 
         while !shutdown_flag.load(Relaxed) && window.is_open() {
