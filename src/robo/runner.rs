@@ -5,6 +5,7 @@ use std::{sync::{
 
 use arc_swap::ArcSwap;
 use minifb::{Key, Window, WindowOptions};
+use log::{info,debug};
 
 use crate::robo::{
     EnvImage, ImuState, LidarScan, Map, SlamImage, TwoWheelControl, controller::Controller,
@@ -91,6 +92,9 @@ where
         let env_render_mailbox = Arc::new(ArcSwap::new(Arc::new(EnvImage::default())));
         let slam_render_mailbox = Arc::new(ArcSwap::new(Arc::new(SlamImage::default())));
 
+		// Init logger
+		env_logger::init();
+		
         // launch threads
         let slam_handle = self.slam.spawn(
             shutdown_flag.clone(),
@@ -109,6 +113,7 @@ where
             shutdown_flag.clone(),
             lidarscan_mailbox.clone(),
             map_mailbox.clone(),
+			control_mailbox.clone(),
         );
 
         // Set up rendering

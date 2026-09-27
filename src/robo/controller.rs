@@ -1,10 +1,10 @@
 use crate::robo::{ImuState, LidarScan, Map, TwoWheelControl};
 use arc_swap::ArcSwap;
 use std::{
-    collections::HashMap,
-    f32::consts::PI,
-    sync::{Arc, RwLock, atomic::AtomicBool},
-    thread::{self, JoinHandle},
+    collections::HashMap, f32::consts::PI, sync::{
+        Arc, RwLock,
+        atomic::{AtomicBool, Ordering::Relaxed},
+    }, thread::{self, JoinHandle}, time::Duration,
 };
 
 pub trait Controller: Send {
@@ -13,6 +13,7 @@ pub trait Controller: Send {
         shutdown_flag: Arc<AtomicBool>,
         lidar_in: Arc<ArcSwap<LidarScan>>,
         map_in: Arc<ArcSwap<Map>>,
+        ctrl_out: Arc<RwLock<TwoWheelControl>>,
     ) -> JoinHandle<()>;
 }
 
@@ -39,21 +40,24 @@ impl BasicController {
         let mut fx = 0.0f32;
         let mut fy = 0.0f32;
 
-        let nrays_f = scan.angles.len() as f32;
         let max_dist = scan.max_distance - 0.1;
 
+		let mut nhits=0;
         for (&angle, &range) in scan.angles.iter().zip(scan.ranges.iter()) {
             if range > max_dist || angle.abs() > PI {
                 continue;
             }
 
             let mag = self.k / (range.powi(2) + 0.01);
-            fx += mag * angle.cos();
-            fy += mag * angle.sin();
+            fx -= mag * angle.cos();
+            fy -= mag * angle.sin();
+			nhits+=1;
+
         }
-        if nrays_f > 0.0 {
-            fx /= nrays_f;
-            fy /= nrays_f;
+        if nhits > 0 {
+			let nhits=nhits as f32;
+            fx /= nhits;
+            fy /= nhits;
         }
         fx += self.speed;
 
@@ -74,9 +78,18 @@ impl Controller for BasicController {
         shutdown_flag: Arc<AtomicBool>,
         lidar_in: Arc<ArcSwap<LidarScan>>,
         map_in: Arc<ArcSwap<Map>>,
+        ctrl_out: Arc<RwLock<TwoWheelControl>>,
     ) -> JoinHandle<()> {
         thread::spawn(move || {
-            // Basic Slam loop goes here
+            while !shutdown_flag.load(Relaxed) {
+                let lidardata = lidar_in.load().clone();
+                let ctrl = self.control(&lidardata);
+                {
+                    let mut mtx = ctrl_out.write().unwrap();
+					*mtx=ctrl;
+                }
+				thread::sleep(Duration::from_secs_f32(0.02));
+            }
         })
     }
 }

@@ -1,7 +1,8 @@
 use crate::robo::{EnvImage, ImuState, LidarScan, Map, TwoWheelControl, bresenham::Bresenham, io};
 use arc_swap::ArcSwap;
-use minifb::Key::Y;
-use std::net::Shutdown;
+// use minifb::Key::Y;
+// use std::net::Shutdown;
+use log::{debug, error, info, warn};
 use std::sync::atomic::Ordering::Relaxed;
 use std::thread::JoinHandle;
 use std::time::Duration;
@@ -93,6 +94,7 @@ impl SimEnv {
                 };
             }
         }
+
         if (x < 0.0 || y < 0.0) {
             panic!("We could not find a place for the robo. Sorry :(")
         };
@@ -124,7 +126,7 @@ impl SimEnv {
             dx,
             grid,
             dt: 0.02,
-            seconds_per_iter: 0.2,
+            seconds_per_iter: 0.02,
             screenbuffer: vec![0; nh * nw],
         }
     }
@@ -173,31 +175,42 @@ impl SimEnv {
 
     // Kinematics
     pub fn step_fwd(&mut self, input: TwoWheelControl) {
-        self.v += (2.0) * (input.v_r.min(self.speed) - self.v) * self.dt;
-        self.om += (2.0) * (input.om_r.min(self.angvel) - self.om) * self.dt;
+        self.v += 2.0 * (input.v_r.clamp(-self.speed, self.speed) - self.v) * self.dt;
+        self.om += 2.0 * (input.om_r.clamp(-self.angvel, self.angvel) - self.om) * self.dt;
 
         let x_prime = self.x + self.v * self.theta.cos() * self.dt;
         let y_prime = self.y + self.v * self.theta.sin() * self.dt;
 
-        let mut path = Bresenham::new(
+        let path = Bresenham::new(
             self.real2idx(self.x),
             self.real2idx(self.y),
             self.real2idx(x_prime),
             self.real2idx(y_prime),
         );
 
-        let mut target = (self.real2idx(self.x), self.real2idx(self.y));
+		let mut target = (self.real2idx(self.x), self.real2idx(self.y));
+        let mut hit_wall = false;
+
         for (x, y) in path {
-            target = (x, y);
-            if self.grid[(x + y * self.nh as i32) as usize] {
+            if self.grid[(x + y * self.nw as i32) as usize] {
+                hit_wall = true;
                 break;
             }
+            target = (x, y);
         }
-        self.x = self.idx2real(target.0);
-        self.y = self.idx2real(target.1);
+
+        if hit_wall {
+            self.x = self.idx2real(target.0);
+            self.y = self.idx2real(target.1);
+            self.v = 0.0; 
+        } else {
+            self.x = x_prime;
+            self.y = y_prime;
+        }
         self.theta += self.om * self.dt;
     }
     pub fn render(&mut self) {
+        self.screenbuffer.resize(self.nw * self.nh, 0);
         for (pixel, &is_wall) in self.screenbuffer.iter_mut().zip(self.grid.iter()) {
             *pixel = if is_wall { 0x00000000 } else { 0xFFFFFFFF };
         }
@@ -240,6 +253,9 @@ impl Environment for SimEnv {
     ) -> JoinHandle<()> {
         thread::spawn(move || {
             // Main simulation loop
+            let mut count: u32 = 0;
+            info!("Environment thread starting now");
+
             while !shutdown_flag.load(Relaxed) {
                 let current_control = {
                     let guard = control_in.read().unwrap();
@@ -247,11 +263,17 @@ impl Environment for SimEnv {
                 };
                 self.step_fwd(current_control);
 
-				// Publish lidardata
+                debug!("Running iteration no: {}", count);
+                debug!(
+                    "Stepped fwd with ctrl: {:#?}. Moving robo to pose x:{}, y:{}, theta:{}",
+                    current_control, self.x, self.y, self.theta
+                );
+                count += 1;
+                // Publish lidardata
                 let scan = self.lidarscan();
                 lidar_out.store(Arc::new(scan));
-				
-				// Publish environment render
+
+                // Publish environment render
                 self.render();
                 if let Some(mailbox) = &img_out {
                     let current_buffer = std::mem::take(&mut self.screenbuffer);
@@ -271,6 +293,8 @@ impl Environment for SimEnv {
                         }
                     }
                 }
+
+                thread::sleep(Duration::from_secs_f32(self.seconds_per_iter));
             }
         })
     }

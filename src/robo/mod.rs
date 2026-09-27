@@ -19,7 +19,7 @@ const CHUNK_SIZE: usize = CHUNK_L * CHUNK_L;
 pub type Chunk = [f32; CHUNK_SIZE];
 pub type Map = HashMap<(i32, i32), Arc<Chunk>>;
 
-struct MapQuery {
+pub struct MapQuery {
 	chunk_coord:(i32,i32),
 	localx:u16,
 	localy:u16,
@@ -28,7 +28,7 @@ struct MapQuery {
 
 /* --------------------------- Define lidar state --------------------------- */
 #[derive(Clone)]
-struct LidarScan {
+pub struct LidarScan {
     pub ranges: Vec<f32>,
     pub angles: Vec<f32>,
     pub max_distance: f32,
@@ -45,7 +45,7 @@ impl Default for LidarScan {
 
 /* ----------------------------- Define ImuState ---------------------------- */
 #[derive(Clone, Copy)]
-struct ImuState {
+pub struct ImuState {
     x: f32,
     y: f32,
     theta: f32,
@@ -61,8 +61,8 @@ impl Default for ImuState {
 }
 
 /* --------------------------- define Controlinput -------------------------- */
-#[derive(Clone, Copy)]
-struct TwoWheelControl {
+#[derive(Clone, Copy,Debug)]
+pub struct TwoWheelControl {
     v_r: f32,
     om_r: f32,
 }
@@ -77,7 +77,7 @@ impl Default for TwoWheelControl {
 
 /* ------------------------- define screen/rendering ------------------------ */
 
-struct EnvImage {
+pub struct EnvImage {
 	height:usize,
 	width:usize,
 	data:Vec<u32>
@@ -89,7 +89,7 @@ impl Default for EnvImage{
 	}
 }
 
-struct SlamImage {
+pub struct SlamImage {
 	height:usize,
 	width:usize,
 	data:Vec<u32>

@@ -1,6 +1,6 @@
 use minifb::{Key, Window, WindowOptions};
-use std::{cmp, fs::File, };
 use std::io::{self, BufReader, BufWriter, Read, Write};
+use std::{cmp, fs::File};
 #[allow(non_upper_case_globals)]
 const dx: f32 = 0.05;
 const L: usize = (20.0 / dx) as usize;
@@ -20,7 +20,13 @@ impl iPoint {
     }
 }
 
-pub fn save_grid(path: &str, height: u32, width: u32, stepsize: f32, data: &[bool]) -> io::Result<()> {
+pub fn save_grid(
+    path: &str,
+    height: u32,
+    width: u32,
+    stepsize: f32,
+    data: &[bool],
+) -> io::Result<()> {
     let file = File::create(path)?;
     let mut writer = BufWriter::new(file);
 
@@ -70,6 +76,24 @@ fn main() {
         iPoint { x: 30, y: 32 },
     );
 
+    // Wall of edges
+    grid.chunks_exact_mut(L).enumerate().for_each(|(y, row)| {
+        if y == 0 || y == L - 1 {
+            row.fill(true);
+        } else {
+            match row {
+                [first, .., last] => {
+                    *first = true;
+                    *last = true;
+                }
+                [single] => {
+                    *single = true;
+                }
+                [] => unreachable!(),
+            }
+        }
+    });
+
     let buffer: Vec<u32> = grid
         .iter()
         .map(|&is_filled| if is_filled { 0xFFFFFF } else { 0x000000 })
@@ -85,12 +109,11 @@ fn main() {
         panic!("{}", e);
     });
 
-    window.limit_update_rate(Some(std::time::Duration::from_micros(16600)));
+	window.set_target_fps(10);
 
     while window.is_open() && !window.is_key_down(Key::Escape) {
         window.update_with_buffer(&buffer, L, L).unwrap();
     }
-	
-	save_grid("data/map1.dat", L as u32, L as u32, dx, &grid).expect("GRAAAAHHHHH");
-	
+
+    save_grid("data/map1.dat", L as u32, L as u32, dx, &grid).expect("GRAAAAHHHHH");
 }
