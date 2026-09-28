@@ -1,4 +1,4 @@
-use crate::robo::{ImuState, LidarScan, Map, SlamImage};
+use crate::robo::{Chunk, ImuState, LidarScan, Map, MapQuery, SlamImage};
 use arc_swap::ArcSwap;
 use std::{
     collections::HashMap,
@@ -43,6 +43,10 @@ pub struct GMapping {
     pub last_imu: ImuState,
 	
 	// BUffers
+	pub lp_buf:Vec<f32>,
+	pub query_buf:Vec<MapQuery>,
+
+
 
 }
 
@@ -64,11 +68,15 @@ impl GMapping {
 
             // Init these all to origin
             particles: vec![ImuState::default(); n_part],
-            particle_maps: vec![],
+            particle_maps: vec![Map::default();n_part],
             weights: vec![1.0; n_part],
             last_imu: ImuState::default(),
+			
+			lp_buf:vec![0.0;n_part],
+			query_buf:vec![MapQuery::default();n_part],
         }
     }
+	
 }
 
 impl Slam for GMapping {

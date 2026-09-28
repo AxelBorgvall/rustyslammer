@@ -6,7 +6,8 @@ pub mod io;
 pub mod bresenham;
 
 
-use std::collections::HashMap;
+// use std::collections::HashMap;
+use rustc_hash::FxHashMap;
 use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::Duration;
@@ -17,13 +18,23 @@ use arc_swap::ArcSwap;
 const CHUNK_L: usize = 32;
 const CHUNK_SIZE: usize = CHUNK_L * CHUNK_L;
 pub type Chunk = [f32; CHUNK_SIZE];
-pub type Map = HashMap<(i32, i32), Arc<Chunk>>;
+pub type Map = FxHashMap<(i32, i32), Arc<Chunk>>;
 
 pub struct MapQuery {
 	chunk_coord:(i32,i32),
 	localx:u16,
 	localy:u16,
 	prop_id:u32,
+}
+impl Default for MapQuery{
+	fn default() -> Self {
+		Self {
+			chunk_coord:(0,0),
+			localx:0,
+			localy:0,
+			prop_id:0,
+		}
+	}
 }
 
 /* --------------------------- Define lidar state --------------------------- */
