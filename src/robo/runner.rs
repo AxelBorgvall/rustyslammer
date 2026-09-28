@@ -88,7 +88,7 @@ where
         let imu_mailbox: Arc<RwLock<ImuState>> = Arc::new(RwLock::new(ImuState::default()));
         let lidarscan_mailbox: Arc<ArcSwap<LidarScan>> =
             Arc::new(ArcSwap::new(Arc::new(LidarScan::default())));
-        let map_mailbox: Arc<ArcSwap<Map>> = Arc::new(ArcSwap::new(Arc::new(Map::new())));
+        let map_mailbox: Arc<ArcSwap<Map>> = Arc::new(ArcSwap::new(Arc::new(Map::default())));
         let control_mailbox: Arc<RwLock<TwoWheelControl>> =
             Arc::new(RwLock::new(TwoWheelControl::default()));
 

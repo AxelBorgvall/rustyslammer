@@ -11,7 +11,6 @@ use rustc_hash::FxHashMap;
 use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::Duration;
-
 use arc_swap::ArcSwap;
 
 /* ------------------------------- Define map ------------------------------- */
@@ -20,6 +19,7 @@ const CHUNK_SIZE: usize = CHUNK_L * CHUNK_L;
 pub type Chunk = [f32; CHUNK_SIZE];
 pub type Map = FxHashMap<(i32, i32), Arc<Chunk>>;
 
+#[derive(Debug,Clone)]
 pub struct MapQuery {
 	chunk_coord:(i32,i32),
 	localx:u16,
