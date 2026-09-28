@@ -1,13 +1,13 @@
+pub mod bresenham;
 pub mod controller;
 pub mod environment;
+pub mod io;
 pub mod runner;
 pub mod slam;
-pub mod io;
-pub mod bresenham;
-
 
 // use std::collections::HashMap;
 use rustc_hash::FxHashMap;
+use std::ops::{Add, Div, Mul, Sub};
 use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::Duration;
@@ -21,20 +21,20 @@ pub type Map = FxHashMap<(i32, i32), Arc<Chunk>>;
 
 #[derive(Debug,Clone)]
 pub struct MapQuery {
-	chunk_coord:(i32,i32),
-	localx:u16,
-	localy:u16,
-	prop_id:u32,
+    chunk_coord: (i32, i32),
+    localx: u16,
+    localy: u16,
+    prop_id: u32,
 }
-impl Default for MapQuery{
-	fn default() -> Self {
-		Self {
-			chunk_coord:(0,0),
-			localx:0,
-			localy:0,
-			prop_id:0,
-		}
-	}
+impl Default for MapQuery {
+    fn default() -> Self {
+        Self {
+            chunk_coord: (0, 0),
+            localx: 0,
+            localy: 0,
+            prop_id: 0,
+        }
+    }
 }
 
 /* --------------------------- Define lidar state --------------------------- */
@@ -70,9 +70,62 @@ impl Default for ImuState {
         }
     }
 }
+impl Add for ImuState {
+    type Output = Self;
+    fn add(self, other: Self) -> Self::Output {
+        Self {
+            x: self.x + other.x,
+            y: self.y + other.y,
+            theta: self.theta + other.theta,
+        }
+    }
+}
+
+impl Sub for ImuState {
+    type Output = Self;
+    fn sub(self, other: Self) -> Self::Output {
+        Self {
+            x: self.x - other.x,
+            y: self.y - other.y,
+            theta: self.theta - other.theta,
+        }
+    }
+}
+impl Mul for ImuState {
+    type Output = Self;
+    fn mul(self, rhs: Self) -> Self::Output {
+        Self {
+            x: self.x * rhs.x,
+            y: self.y * rhs.y,
+            theta: self.theta * rhs.theta,
+        }
+    }
+}
+impl Div<f32> for ImuState{
+	type Output =Self;
+	fn div(self, rhs: f32) -> Self::Output {
+		Self{
+			x:self.x/rhs,
+			y:self.y/rhs,
+			theta:self.theta/rhs,
+		}
+		
+	} 
+}
+impl  ImuState{
+	fn abs(self)->Self{
+		Self{
+			x:self.x.abs(),
+			y:self.y.abs(),
+			theta:self.theta.abs(),
+			
+		}
+	}
+
+}
 
 /* --------------------------- define Controlinput -------------------------- */
-#[derive(Clone, Copy,Debug)]
+#[derive(Clone, Copy, Debug)]
 pub struct TwoWheelControl {
     v_r: f32,
     om_r: f32,
@@ -89,27 +142,33 @@ impl Default for TwoWheelControl {
 /* ------------------------- define screen/rendering ------------------------ */
 
 pub struct EnvImage {
-	height:usize,
-	width:usize,
-	data:Vec<u32>
+    height: usize,
+    width: usize,
+    data: Vec<u32>,
 }
 
-impl Default for EnvImage{
-	fn default() -> Self {
-		Self { height: 0, width: 0, data: vec![] }
-	}
+impl Default for EnvImage {
+    fn default() -> Self {
+        Self {
+            height: 0,
+            width: 0,
+            data: vec![],
+        }
+    }
 }
 
 pub struct SlamImage {
-	height:usize,
-	width:usize,
-	data:Vec<u32>
+    height: usize,
+    width: usize,
+    data: Vec<u32>,
 }
 
-impl Default for SlamImage{
-	fn default() -> Self {
-		Self { height: 0, width: 0, data: vec![] }
-	}
+impl Default for SlamImage {
+    fn default() -> Self {
+        Self {
+            height: 0,
+            width: 0,
+            data: vec![],
+        }
+    }
 }
-
-

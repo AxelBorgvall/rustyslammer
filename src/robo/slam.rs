@@ -5,7 +5,11 @@ use std::{
     sync::{Arc, RwLock, atomic::AtomicBool},
     thread::{self, JoinHandle},
 };
-
+use rand::thread_rng;
+use rand_distr::{Normal,Distribution};
+use std::time::Instant;
+use std::thread::sleep;
+use std::time::Duration;
 /* --------------------------------- Config --------------------------------- */
 
 pub trait Slam: Send {
@@ -41,6 +45,7 @@ pub struct GMapping {
     pub particles: Vec<ImuState>,
     pub particle_maps: Vec<Map>,
     pub last_imu: ImuState,
+	pub last_update:f32,
 	
 	// BUffers
 	pub lp_buf:Vec<f32>,
@@ -71,11 +76,26 @@ impl GMapping {
             particle_maps: vec![Map::default();n_part],
             weights: vec![1.0; n_part],
             last_imu: ImuState::default(),
+			last_update:0.0,
 			
 			lp_buf:vec![0.0;n_part],
 			query_buf:vec![MapQuery::default();n_part],
         }
     }
+	
+	fn update_positions(&mut self,imu_data:ImuState,lidar_data:LidarScan,dt:f32){
+		let delta=(imu_data-self.last_imu);
+		let noise=(delta/dt).abs()*ImuState{
+			x:self.vel_noise,y:self.vel_noise,theta:self.ang_noise,
+		};
+
+		self.last_imu=imu_data;
+		
+		let mut rng= thread_rng();
+		let priors=self.particles.iter().zip(other)
+		
+		
+	}
 	
 }
 
@@ -92,4 +112,6 @@ impl Slam for GMapping {
             // Basic Slam loop goes here
         })
     }
+	
+	
 }
