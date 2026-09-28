@@ -13,11 +13,15 @@ use std::{
     thread,
 };
 
+
+
+
 pub trait Environment: Send {
     fn spawn(
         self,
         shutdown_flag: Arc<AtomicBool>,
         lidar_out: Arc<ArcSwap<LidarScan>>,
+        imu_out: Arc<RwLock<ImuState>>,
         control_in: Arc<RwLock<TwoWheelControl>>,
         img_out: Option<Arc<ArcSwap<EnvImage>>>,
     ) -> JoinHandle<()>;
@@ -188,7 +192,7 @@ impl SimEnv {
             self.real2idx(y_prime),
         );
 
-		let mut target = (self.real2idx(self.x), self.real2idx(self.y));
+        let mut target = (self.real2idx(self.x), self.real2idx(self.y));
         let mut hit_wall = false;
 
         for (x, y) in path {
@@ -202,7 +206,7 @@ impl SimEnv {
         if hit_wall {
             self.x = self.idx2real(target.0);
             self.y = self.idx2real(target.1);
-            self.v = 0.0; 
+            self.v = 0.0;
         } else {
             self.x = x_prime;
             self.y = y_prime;
@@ -248,6 +252,7 @@ impl Environment for SimEnv {
         mut self,
         shutdown_flag: Arc<AtomicBool>,
         lidar_out: Arc<ArcSwap<LidarScan>>,
+        imu_out: Arc<RwLock<ImuState>>,
         control_in: Arc<RwLock<TwoWheelControl>>,
         img_out: Option<Arc<ArcSwap<EnvImage>>>,
     ) -> JoinHandle<()> {
@@ -272,6 +277,16 @@ impl Environment for SimEnv {
                 // Publish lidardata
                 let scan = self.lidarscan();
                 lidar_out.store(Arc::new(scan));
+
+                // Publish IMUData
+                {
+                    let mut mtx = imu_out.write().unwrap();
+                    *mtx = ImuState {
+                        x: self.x,
+                        y: self.y,
+                        theta: self.theta,
+                    };
+                }
 
                 // Publish environment render
                 self.render();

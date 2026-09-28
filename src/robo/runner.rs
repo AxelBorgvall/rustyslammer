@@ -1,11 +1,14 @@
-use std::{sync::{
-    Arc, RwLock,
-    atomic::{AtomicBool, Ordering::Relaxed},
-}, time::Duration};
+use std::{
+    sync::{
+        Arc, RwLock,
+        atomic::{AtomicBool, Ordering::Relaxed},
+    },
+    time::Duration,
+};
 
 use arc_swap::ArcSwap;
+use log::{debug, info};
 use minifb::{Key, Window, WindowOptions};
-use log::{info,debug};
 
 use crate::robo::{
     EnvImage, ImuState, LidarScan, Map, SlamImage, TwoWheelControl, controller::Controller,
@@ -27,7 +30,7 @@ fn fit_to_canvas(
     max_h: usize,
     bg_color: u32,
 ) -> Vec<u32> {
-	// Return and empty frame if the image is 0size
+    // Return and empty frame if the image is 0size
     if src_w == 0 || src_h == 0 {
         return vec![bg_color; max_w * max_h];
     }
@@ -67,9 +70,9 @@ pub struct SimRunner<E: Environment, S: Slam, C: Controller> {
 
 impl<E, S, C> SimRunner<E, S, C>
 where
-    E: Environment+Send+'static,
-    S: Slam+Send+'static,
-    C: Controller+Send+'static,
+    E: Environment + Send + 'static,
+    S: Slam + Send + 'static,
+    C: Controller + Send + 'static,
 {
     pub fn new(environment: E, slam: S, controller: C) -> Self {
         Self {
@@ -92,9 +95,9 @@ where
         let env_render_mailbox = Arc::new(ArcSwap::new(Arc::new(EnvImage::default())));
         let slam_render_mailbox = Arc::new(ArcSwap::new(Arc::new(SlamImage::default())));
 
-		// Init logger
-		env_logger::init();
-		
+        // Init logger
+        env_logger::init();
+
         // launch threads
         let slam_handle = self.slam.spawn(
             shutdown_flag.clone(),
@@ -106,6 +109,7 @@ where
         let env_handle = self.environment.spawn(
             shutdown_flag.clone(),
             lidarscan_mailbox.clone(),
+            imu_mailbox.clone(),
             control_mailbox.clone(),
             Option::Some(env_render_mailbox.clone()),
         );
@@ -113,7 +117,7 @@ where
             shutdown_flag.clone(),
             lidarscan_mailbox.clone(),
             map_mailbox.clone(),
-			control_mailbox.clone(),
+            control_mailbox.clone(),
         );
 
         // Set up rendering
@@ -125,7 +129,7 @@ where
         )
         .expect("Failed to create window");
         // window.limit_update_rate(Some(Duration::from_micros(50_000)));
-		window.set_target_fps(20);
+        window.set_target_fps(20);
         let mut combined_buffer = vec![0u32; WINDOW_WIDTH * WINDOW_HEIGHT];
 
         while !shutdown_flag.load(Relaxed) && window.is_open() {
@@ -166,7 +170,7 @@ where
                     .copy_from_slice(&frame_right[left_start..left_end]);
             }
 
-			// Draw to screen
+            // Draw to screen
             window
                 .update_with_buffer(&combined_buffer, WINDOW_WIDTH, WINDOW_HEIGHT)
                 .unwrap();
@@ -176,7 +180,7 @@ where
                 shutdown_flag.store(true, Relaxed);
             }
         }
-		shutdown_flag.store(true, Relaxed);
+        shutdown_flag.store(true, Relaxed);
 
         slam_handle.join().expect("SLAM thread panicked!");
         env_handle.join().expect("Environment thread panicked!");
