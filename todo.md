@@ -5,9 +5,5 @@
 3. Sketch out data for Runner (DONE)
 
 # definitions
-0. Make a SimEnv (DONE)
-1. Write SimEnv
-2. Write BasicController
-3. Write SleepySlam
-4. Add display functionality (done)
-5. Test simulation
+1. Add IMU publishing to SimEnv
+2. Write GMapping SLAM
