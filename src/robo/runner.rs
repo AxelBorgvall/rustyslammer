@@ -175,7 +175,7 @@ where
                 .update_with_buffer(&combined_buffer, WINDOW_WIDTH, WINDOW_HEIGHT)
                 .unwrap();
 
-            // 5. Handle exit conditions
+			// Exit con
             if window.is_key_down(Key::Escape) || window.is_key_down(Key::Q) {
                 shutdown_flag.store(true, Relaxed);
             }
