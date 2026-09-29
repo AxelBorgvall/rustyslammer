@@ -1,9 +1,7 @@
 use crate::robo::{Chunk, ImuState, LidarScan, Map, MapQuery, SlamImage};
 use arc_swap::ArcSwap;
 use std::{
-    collections::HashMap,
-    sync::{Arc, RwLock, atomic::AtomicBool},
-    thread::{self, JoinHandle},
+    collections::HashMap, sync::{Arc, RwLock, atomic::{AtomicBool, Ordering::Relaxed}}, thread::{self, JoinHandle},
 };
 use rand::thread_rng;
 use rand_distr::{Normal,Distribution};
@@ -85,14 +83,21 @@ impl GMapping {
 	
 	fn update_positions(&mut self,imu_data:ImuState,lidar_data:LidarScan,dt:f32){
 		let delta=(imu_data-self.last_imu);
-		let noise=(delta/dt).abs()*ImuState{
-			x:self.vel_noise,y:self.vel_noise,theta:self.ang_noise,
-		};
-
 		self.last_imu=imu_data;
 		
 		let mut rng= thread_rng();
-		let priors=self.particles.iter().zip(other)
+		let nosie_dist_x=Normal::new(0.0,delta.x/dt*self.vel_noise+0.005).unwrap();
+		let nosie_dist_y=Normal::new(0.0,delta.y/dt*self.vel_noise+0.005).unwrap();
+		let nosie_dist_theta=Normal::new(0.0,delta.theta/dt*self.ang_noise+0.01).unwrap();
+		
+		let priors:Vec<ImuState>=self.particles.iter().map(|particle|{
+			ImuState {
+				x:particle.x+nosie_dist_x.sample(&mut rng),
+				y:particle.y+nosie_dist_y.sample(&mut rng),
+				theta:particle.theta+nosie_dist_theta.sample(&mut rng),
+			}
+		}).collect();
+		let sigsqr:f32=(0.2f32).powi(2);
 		
 		
 	}
@@ -110,6 +115,9 @@ impl Slam for GMapping {
     ) -> JoinHandle<()> {
         thread::spawn(move || {
             // Basic Slam loop goes here
+			while !shutdown_flag.load(Relaxed){
+
+			}
         })
     }
 	
