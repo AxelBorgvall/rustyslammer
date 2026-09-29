@@ -14,9 +14,24 @@ use std::time::Duration;
 use arc_swap::ArcSwap;
 
 /* ------------------------------- Define map ------------------------------- */
+pub struct Cell {
+	pub hits:u16,
+	pub visits:u16,
+	pub mx:f32, // Mean hit position: [0,1)
+	pub my:f32,
+}
+impl Cell {
+    #[inline]
+    pub fn occupied(&self, thresh: f32) -> bool {
+        self.hits > 0 && self.hits as f32 >= thresh * self.visits as f32
+    }
+    pub fn occupancy(&self) -> f32 {
+        if self.visits == 0 { 0.5 } else { self.hits as f32 / self.visits as f32 }
+    }
+}
 const CHUNK_L: usize = 32;
 const CHUNK_SIZE: usize = CHUNK_L * CHUNK_L;
-pub type Chunk = [f32; CHUNK_SIZE];
+pub type Chunk = [Cell; CHUNK_SIZE];
 pub type Map = FxHashMap<(i32, i32), Arc<Chunk>>;
 
 #[derive(Debug,Clone)]
