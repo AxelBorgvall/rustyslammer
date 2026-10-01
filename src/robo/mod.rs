@@ -78,12 +78,12 @@ impl Default for LidarScan {
 
 /* ----------------------------- Define ImuState ---------------------------- */
 #[derive(Clone, Copy)]
-pub struct ImuState {
+pub struct RobotPose {
     x: f32,
     y: f32,
     theta: f32,
 }
-impl Default for ImuState {
+impl Default for RobotPose {
     fn default() -> Self {
         Self {
             x: 0.0,
@@ -92,7 +92,7 @@ impl Default for ImuState {
         }
     }
 }
-impl Add for ImuState {
+impl Add for RobotPose {
     type Output = Self;
     fn add(self, other: Self) -> Self::Output {
         Self {
@@ -103,7 +103,7 @@ impl Add for ImuState {
     }
 }
 
-impl Sub for ImuState {
+impl Sub for RobotPose {
     type Output = Self;
     fn sub(self, other: Self) -> Self::Output {
         Self {
@@ -113,7 +113,7 @@ impl Sub for ImuState {
         }
     }
 }
-impl Mul for ImuState {
+impl Mul for RobotPose {
     type Output = Self;
     fn mul(self, rhs: Self) -> Self::Output {
         Self {
@@ -123,7 +123,7 @@ impl Mul for ImuState {
         }
     }
 }
-impl Div<f32> for ImuState {
+impl Div<f32> for RobotPose {
     type Output = Self;
     fn div(self, rhs: f32) -> Self::Output {
         Self {
@@ -133,7 +133,7 @@ impl Div<f32> for ImuState {
         }
     }
 }
-impl ImuState {
+impl RobotPose {
     fn abs(self) -> Self {
         Self {
             x: self.x.abs(),

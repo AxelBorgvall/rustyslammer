@@ -1,4 +1,4 @@
-use crate::robo::{EnvImage, ImuState, LidarScan, Map, TwoWheelControl, bresenham::Bresenham, io};
+use crate::robo::{EnvImage, RobotPose, LidarScan, Map, TwoWheelControl, bresenham::Bresenham, io};
 use arc_swap::ArcSwap;
 // use minifb::Key::Y;
 // use std::net::Shutdown;
@@ -13,15 +13,12 @@ use std::{
     thread,
 };
 
-
-
-
 pub trait Environment: Send {
     fn spawn(
         self,
         shutdown_flag: Arc<AtomicBool>,
         lidar_out: Arc<ArcSwap<LidarScan>>,
-        imu_out: Arc<RwLock<ImuState>>,
+        imu_out: Arc<RwLock<RobotPose>>,
         control_in: Arc<RwLock<TwoWheelControl>>,
         img_out: Option<Arc<ArcSwap<EnvImage>>>,
     ) -> JoinHandle<()>;
@@ -148,7 +145,7 @@ impl SimEnv {
         let end_x = ((rx + self.max_range * ray_angle.cos()) / self.dx) as i32;
         let end_y = ((ry + self.max_range * ray_angle.sin()) / self.dx) as i32;
 
-        for (x, y) in Bresenham::new(start_x, start_y, end_x, end_y) {
+        for (x, y) in Bresenham::new((start_x, start_y), (end_x, end_y)) {
             if x < 0 || x >= self.nw as i32 || y < 0 || y >= self.nh as i32 {
                 return self.max_range;
             }
@@ -186,10 +183,8 @@ impl SimEnv {
         let y_prime = self.y + self.v * self.theta.sin() * self.dt;
 
         let path = Bresenham::new(
-            self.real2idx(self.x),
-            self.real2idx(self.y),
-            self.real2idx(x_prime),
-            self.real2idx(y_prime),
+            (self.real2idx(self.x), self.real2idx(self.y)),
+            (self.real2idx(x_prime), self.real2idx(y_prime)),
         );
 
         let mut target = (self.real2idx(self.x), self.real2idx(self.y));
@@ -233,10 +228,8 @@ impl SimEnv {
         let x_offset = self.real2idx(self.x + self.theta.cos() * 6.0 * self.dx);
         let y_offset = self.real2idx(self.y + self.theta.sin() * 6.0 * self.dx);
         let nose = Bresenham::new(
-            self.real2idx(self.x),
-            self.real2idx(self.y),
-            x_offset,
-            y_offset,
+            (self.real2idx(self.x), self.real2idx(self.y)),
+            (x_offset, y_offset),
         );
 
         for (x, y) in nose {
@@ -252,7 +245,7 @@ impl Environment for SimEnv {
         mut self,
         shutdown_flag: Arc<AtomicBool>,
         lidar_out: Arc<ArcSwap<LidarScan>>,
-        imu_out: Arc<RwLock<ImuState>>,
+        imu_out: Arc<RwLock<RobotPose>>,
         control_in: Arc<RwLock<TwoWheelControl>>,
         img_out: Option<Arc<ArcSwap<EnvImage>>>,
     ) -> JoinHandle<()> {
@@ -281,7 +274,7 @@ impl Environment for SimEnv {
                 // Publish IMUData
                 {
                     let mut mtx = imu_out.write().unwrap();
-                    *mtx = ImuState {
+                    *mtx = RobotPose {
                         x: self.x,
                         y: self.y,
                         theta: self.theta,

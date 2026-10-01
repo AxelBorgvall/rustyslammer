@@ -8,15 +8,15 @@ pub struct Bresenham {
 }
 
 impl Bresenham {
-    pub fn new(start_x: i32, start_y: i32, end_x: i32, end_y: i32) -> Self {
+    pub fn new(start: (i32,i32), end: (i32, i32)) -> Self {
         Self {
-            x: start_x, y: start_y,
-            end_x, end_y,
-            dx: (start_x - end_x).abs(),
-            dy: -(start_y - end_y).abs(),
-            sx: if start_x < end_x { 1 } else { -1 },
-            sy: if start_y < end_y { 1 } else { -1 },
-            err: (start_x - end_x).abs() - (start_y - end_y).abs(),
+            x: start.0, y: start.1,
+            end_x:end.0, end_y:end.1,
+            dx: (start.0 - end.0).abs(),
+            dy: -(start.1 - end.1).abs(),
+            sx: if start.0 < end.0 { 1 } else { -1 },
+            sy: if start.1 < end.1 { 1 } else { -1 },
+            err: (start.0 - end.0).abs() - (start.1 - end.1).abs(),
         }
     }
 }

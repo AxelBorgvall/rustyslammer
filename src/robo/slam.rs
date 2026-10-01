@@ -1,41 +1,55 @@
-use crate::robo::{Chunk, ImuState, LidarScan, Map, MapQuery, SlamImage};
-use arc_swap::ArcSwap;
-use std::{
-    collections::HashMap, sync::{Arc, RwLock, atomic::{AtomicBool, Ordering::Relaxed}}, thread::{self, JoinHandle},
+use crate::robo::{
+    Chunk, RobotPose, LidarScan, Map, MapQuery, SlamImage, bresenham::Bresenham, cell_mut,
+    world2cell,
 };
+use arc_swap::ArcSwap;
 use rand::thread_rng;
-use rand_distr::{Normal,Distribution};
-use std::time::Instant;
+use rand_distr::{Distribution, Normal};
 use std::thread::sleep;
 use std::time::Duration;
+use std::time::Instant;
+use std::{
+    collections::HashMap,
+    sync::{
+        Arc, RwLock,
+        atomic::{AtomicBool, Ordering::Relaxed},
+    },
+    thread::{self, JoinHandle},
+};
 /* --------------------------------- Config --------------------------------- */
 
-pub fn integrate_scan(map: &mut Map, pose: &ImuState, beams: &[[f32; 2]], cfg: &MatchCfg) {
+pub fn integrate_scan(map: &mut Map, pose: &RobotPose, beams: &[[f32; 2]], dx: f32) {
     let (s, c) = pose.theta.sin_cos();
-    let start = world_to_cell(pose.x, pose.y, cfg.dx);
+    let start = world2cell(pose.x, pose.y, dx);
     for &[bx, by] in beams {
         let (wx, wy) = (pose.x + c * bx - s * by, pose.y + s * bx + c * by);
-        let hit = world_to_cell(wx, wy, cfg.dx);
-        for (cx, cy) in bresenham(start, hit) { // adapt to your module's API
-            if (cx, cy) == hit { break; }
+        let hit = world2cell(wx, wy, dx);
+        for (cx, cy) in Bresenham::new(start, hit) {
+            // adapt to your module's API
+            if (cx, cy) == hit {
+                break;
+            }
             cell_mut(map, cx, cy).visits += 1;
         }
         let cell = cell_mut(map, hit.0, hit.1);
         cell.visits += 1;
         cell.hits += 1;
         let n = cell.hits as f32;
-        cell.mx += (wx / cfg.dx - hit.0 as f32 - cell.mx) / n; // running mean
-        cell.my += (wy / cfg.dx - hit.1 as f32 - cell.my) / n;
+        cell.mx += (wx / dx - hit.0 as f32 - cell.mx) / n; // running mean
+        cell.my += (wy / dx - hit.1 as f32 - cell.my) / n;
     }
 }
+
+pub struct MatchCfg {}
+
 pub trait Slam: Send {
     fn spawn(
         self,
         shutdown_flag: Arc<AtomicBool>,
-        imu_in: Arc<RwLock<ImuState>>,
+        imu_in: Arc<RwLock<RobotPose>>,
         lidar_in: Arc<ArcSwap<LidarScan>>,
         map_out: Arc<ArcSwap<Map>>,
-		img_out: Option<Arc<ArcSwap<SlamImage>>>,
+        img_out: Option<Arc<ArcSwap<SlamImage>>>,
     ) -> JoinHandle<()>;
 }
 
@@ -58,17 +72,14 @@ pub struct OGMapping {
 
     // State
     pub weights: Vec<f32>,
-    pub particles: Vec<ImuState>,
+    pub particles: Vec<RobotPose>,
     pub particle_maps: Vec<Map>,
-    pub last_imu: ImuState,
-	pub last_update:f32,
-	
-	// BUffers
-	pub lp_buf:Vec<f32>,
-	pub query_buf:Vec<MapQuery>,
+    pub last_imu: RobotPose,
+    pub last_update: f32,
 
-
-
+    // BUffers
+    pub lp_buf: Vec<f32>,
+    pub query_buf: Vec<MapQuery>,
 }
 
 impl OGMapping {
@@ -88,63 +99,58 @@ impl OGMapping {
             max_halvings: 4,
 
             // Init these all to origin
-            particles: vec![ImuState::default(); n_part],
-            particle_maps: vec![Map::default();n_part],
+            particles: vec![RobotPose::default(); n_part],
+            particle_maps: vec![Map::default(); n_part],
             weights: vec![1.0; n_part],
-            last_imu: ImuState::default(),
-			last_update:0.0,
-			
-			lp_buf:vec![0.0;n_part],
-			query_buf:vec![MapQuery::default();n_part],
+            last_imu: RobotPose::default(),
+            last_update: 0.0,
+
+            lp_buf: vec![0.0; n_part],
+            query_buf: vec![MapQuery::default(); n_part],
         }
     }
-	
-	fn compute_dist(&self,prior:ImuState,imu_data:ImuState,lidar_data:&LidarScan){
 
-	}
-	pub fn update_positions(&mut self,imu_data:ImuState,lidar_data:&LidarScan,dt:f32){
-		// Compute priors
-		let delta=(imu_data-self.last_imu);
-		self.last_imu=imu_data;
-		
-		let mut rng= thread_rng();
-		let nosie_dist_x=Normal::new(0.0,(delta.x/dt*self.vel_noise).abs()+0.005).unwrap();
-		let nosie_dist_y=Normal::new(0.0,(delta.y/dt*self.vel_noise).abs()+0.005).unwrap();
-		let nosie_dist_theta=Normal::new(0.0,(delta.theta/dt*self.ang_noise).abs()+0.01).unwrap();
-		
-		let priors:Vec<ImuState>=self.particles.iter().map(|particle|{
-			ImuState {
-				x:particle.x+nosie_dist_x.sample(&mut rng),
-				y:particle.y+nosie_dist_y.sample(&mut rng),
-				theta:particle.theta+nosie_dist_theta.sample(&mut rng),
-			}
-		}).collect();
-		let sigsqr:f32=(0.2f32).powi(2);
-		
-		for prior in priors{
-			self.compute_dist(prior, imu_data, &lidar_data);
-		}
-		
-	}
-	
+    fn compute_dist(&self, prior: RobotPose, imu_data: RobotPose, lidar_data: &LidarScan) {}
+    pub fn update_positions(&mut self, imu_data: RobotPose, lidar_data: &LidarScan, dt: f32) {
+        // Compute priors
+        let delta = (imu_data - self.last_imu);
+        self.last_imu = imu_data;
+
+        let mut rng = thread_rng();
+        let nosie_dist_x = Normal::new(0.0, (delta.x / dt * self.vel_noise).abs() + 0.005).unwrap();
+        let nosie_dist_y = Normal::new(0.0, (delta.y / dt * self.vel_noise).abs() + 0.005).unwrap();
+        let nosie_dist_theta =
+            Normal::new(0.0, (delta.theta / dt * self.ang_noise).abs() + 0.01).unwrap();
+
+        let priors: Vec<RobotPose> = self
+            .particles
+            .iter()
+            .map(|particle| RobotPose {
+                x: particle.x + nosie_dist_x.sample(&mut rng),
+                y: particle.y + nosie_dist_y.sample(&mut rng),
+                theta: particle.theta + nosie_dist_theta.sample(&mut rng),
+            })
+            .collect();
+        let sigsqr: f32 = (0.2f32).powi(2);
+
+        for prior in priors {
+            self.compute_dist(prior, imu_data, &lidar_data);
+        }
+    }
 }
 
 impl Slam for OGMapping {
     fn spawn(
         self,
         shutdown_flag: Arc<AtomicBool>,
-        imu_in: Arc<RwLock<ImuState>>,
+        imu_in: Arc<RwLock<RobotPose>>,
         lidar_in: Arc<ArcSwap<LidarScan>>,
         map_out: Arc<ArcSwap<Map>>,
-		img_out: Option<Arc<ArcSwap<SlamImage>>>,
+        img_out: Option<Arc<ArcSwap<SlamImage>>>,
     ) -> JoinHandle<()> {
         thread::spawn(move || {
             // Basic Slam loop goes here
-			while !shutdown_flag.load(Relaxed){
-
-			}
+            while !shutdown_flag.load(Relaxed) {}
         })
     }
-	
-	
 }

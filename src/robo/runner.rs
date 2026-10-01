@@ -11,7 +11,7 @@ use log::{debug, info};
 use minifb::{Key, Window, WindowOptions};
 
 use crate::robo::{
-    EnvImage, ImuState, LidarScan, Map, SlamImage, TwoWheelControl, controller::Controller,
+    EnvImage, RobotPose, LidarScan, Map, SlamImage, TwoWheelControl, controller::Controller,
     environment::Environment, slam::Slam,
 };
 
@@ -85,7 +85,7 @@ where
     pub fn start(self) {
         // Set up mailboxes
         let shutdown_flag: Arc<AtomicBool> = Arc::new(AtomicBool::new(false));
-        let imu_mailbox: Arc<RwLock<ImuState>> = Arc::new(RwLock::new(ImuState::default()));
+        let imu_mailbox: Arc<RwLock<RobotPose>> = Arc::new(RwLock::new(RobotPose::default()));
         let lidarscan_mailbox: Arc<ArcSwap<LidarScan>> =
             Arc::new(ArcSwap::new(Arc::new(LidarScan::default())));
         let map_mailbox: Arc<ArcSwap<Map>> = Arc::new(ArcSwap::new(Arc::new(Map::default())));

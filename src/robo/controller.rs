@@ -1,4 +1,4 @@
-use crate::robo::{ImuState, LidarScan, Map, TwoWheelControl};
+use crate::robo::{RobotPose, LidarScan, Map, TwoWheelControl};
 use arc_swap::ArcSwap;
 use std::{
     collections::HashMap, f32::consts::PI, sync::{
