@@ -10,6 +10,24 @@ use std::thread::sleep;
 use std::time::Duration;
 /* --------------------------------- Config --------------------------------- */
 
+pub fn integrate_scan(map: &mut Map, pose: &ImuState, beams: &[[f32; 2]], cfg: &MatchCfg) {
+    let (s, c) = pose.theta.sin_cos();
+    let start = world_to_cell(pose.x, pose.y, cfg.dx);
+    for &[bx, by] in beams {
+        let (wx, wy) = (pose.x + c * bx - s * by, pose.y + s * bx + c * by);
+        let hit = world_to_cell(wx, wy, cfg.dx);
+        for (cx, cy) in bresenham(start, hit) { // adapt to your module's API
+            if (cx, cy) == hit { break; }
+            cell_mut(map, cx, cy).visits += 1;
+        }
+        let cell = cell_mut(map, hit.0, hit.1);
+        cell.visits += 1;
+        cell.hits += 1;
+        let n = cell.hits as f32;
+        cell.mx += (wx / cfg.dx - hit.0 as f32 - cell.mx) / n; // running mean
+        cell.my += (wy / cfg.dx - hit.1 as f32 - cell.my) / n;
+    }
+}
 pub trait Slam: Send {
     fn spawn(
         self,

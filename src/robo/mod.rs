@@ -6,19 +6,20 @@ pub mod runner;
 pub mod slam;
 
 // use std::collections::HashMap;
+use arc_swap::ArcSwap;
 use rustc_hash::FxHashMap;
 use std::ops::{Add, Div, Mul, Sub};
 use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::Duration;
-use arc_swap::ArcSwap;
 
 /* ------------------------------- Define map ------------------------------- */
+#[derive(Clone, Copy, Default)]
 pub struct Cell {
-	pub hits:u16,
-	pub visits:u16,
-	pub mx:f32, // Mean hit position: [0,1)
-	pub my:f32,
+    pub hits: u16,
+    pub visits: u16,
+    pub mx: f32, // Mean hit position: [0,1)
+    pub my: f32,
 }
 impl Cell {
     #[inline]
@@ -26,30 +27,36 @@ impl Cell {
         self.hits > 0 && self.hits as f32 >= thresh * self.visits as f32
     }
     pub fn occupancy(&self) -> f32 {
-        if self.visits == 0 { 0.5 } else { self.hits as f32 / self.visits as f32 }
+        if self.visits == 0 {
+            0.5
+        } else {
+            self.hits as f32 / self.visits as f32
+        }
     }
 }
+pub fn world2cell(x: f32, y: f32, dx: f32) -> (i32, i32) {
+    ((x / dx).floor() as i32, (y / dx).floor() as i32)
+}
+
 const CHUNK_L: usize = 32;
 const CHUNK_SIZE: usize = CHUNK_L * CHUNK_L;
 pub type Chunk = [Cell; CHUNK_SIZE];
 pub type Map = FxHashMap<(i32, i32), Arc<Chunk>>;
 
-#[derive(Debug,Clone)]
+#[derive(Debug, Clone,Default)]
 pub struct MapQuery {
     chunk_coord: (i32, i32),
     localx: u16,
     localy: u16,
     prop_id: u32,
 }
-impl Default for MapQuery {
-    fn default() -> Self {
-        Self {
-            chunk_coord: (0, 0),
-            localx: 0,
-            localy: 0,
-            prop_id: 0,
-        }
-    }
+fn cell_mut(map: &mut Map, wx: i32, wy: i32) -> &mut Cell {
+    const L: i32 = CHUNK_L as i32;
+    let chunk = map
+        .entry((wx.div_euclid(L), wy.div_euclid(L)))
+        .or_insert_with(|| Arc::new([Cell::default(); CHUNK_SIZE]));
+    let cells = Arc::make_mut(chunk); 
+    &mut cells[wy.rem_euclid(L) as usize * CHUNK_L + wx.rem_euclid(L) as usize]
 }
 
 /* --------------------------- Define lidar state --------------------------- */
@@ -116,27 +123,24 @@ impl Mul for ImuState {
         }
     }
 }
-impl Div<f32> for ImuState{
-	type Output =Self;
-	fn div(self, rhs: f32) -> Self::Output {
-		Self{
-			x:self.x/rhs,
-			y:self.y/rhs,
-			theta:self.theta/rhs,
-		}
-		
-	} 
+impl Div<f32> for ImuState {
+    type Output = Self;
+    fn div(self, rhs: f32) -> Self::Output {
+        Self {
+            x: self.x / rhs,
+            y: self.y / rhs,
+            theta: self.theta / rhs,
+        }
+    }
 }
-impl  ImuState{
-	fn abs(self)->Self{
-		Self{
-			x:self.x.abs(),
-			y:self.y.abs(),
-			theta:self.theta.abs(),
-			
-		}
-	}
-
+impl ImuState {
+    fn abs(self) -> Self {
+        Self {
+            x: self.x.abs(),
+            y: self.y.abs(),
+            theta: self.theta.abs(),
+        }
+    }
 }
 
 /* --------------------------- define Controlinput -------------------------- */
