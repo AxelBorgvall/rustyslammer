@@ -14,6 +14,7 @@ use std::thread;
 use std::time::Duration;
 
 /* ------------------------------- Define map ------------------------------- */
+const COUNT_CAP: u16 = u16::MAX / 2;
 #[derive(Clone, Copy, Default)]
 pub struct Cell {
     pub hits: u16,
@@ -33,6 +34,20 @@ impl Cell {
             self.hits as f32 / self.visits as f32
         }
     }
+    pub fn add_free(&mut self) {
+        if self.visits >= COUNT_CAP {
+            self.visits /= 2;
+            self.hits /= 2;
+        }
+        self.visits += 1;
+    }
+    pub fn add_hit(&mut self, cx: f32, cy: f32) {
+        self.add_free();
+        self.hits += 1;
+        let n = self.hits as f32;
+        self.mx += (cx - self.mx) / n;
+        self.my += (cy - self.my) / n;
+    }
 }
 pub fn world2cell(x: f32, y: f32, dx: f32) -> (i32, i32) {
     ((x / dx).floor() as i32, (y / dx).floor() as i32)
@@ -43,7 +58,7 @@ const CHUNK_SIZE: usize = CHUNK_L * CHUNK_L;
 pub type Chunk = [Cell; CHUNK_SIZE];
 pub type Map = FxHashMap<(i32, i32), Arc<Chunk>>;
 
-#[derive(Debug, Clone,Default)]
+#[derive(Debug, Clone, Default)]
 pub struct MapQuery {
     chunk_coord: (i32, i32),
     localx: u16,
@@ -55,7 +70,7 @@ fn cell_mut(map: &mut Map, wx: i32, wy: i32) -> &mut Cell {
     let chunk = map
         .entry((wx.div_euclid(L), wy.div_euclid(L)))
         .or_insert_with(|| Arc::new([Cell::default(); CHUNK_SIZE]));
-    let cells = Arc::make_mut(chunk); 
+    let cells = Arc::make_mut(chunk);
     &mut cells[wy.rem_euclid(L) as usize * CHUNK_L + wx.rem_euclid(L) as usize]
 }
 
@@ -74,6 +89,36 @@ impl Default for LidarScan {
             max_distance: 0.0,
         }
     }
+}
+pub struct ScanPoints {
+    pub hits: Vec<[f32; 2]>,
+    pub free_only: Vec<[f32; 2]>,
+}
+
+impl ScanPoints {
+    pub fn from_scan(scan: &LidarScan, min_r: f32, usable_r: f32, max_r: f32) -> Self {
+        let mut hits = Vec::with_capacity(scan.ranges.len());
+        let mut free_only = Vec::new();
+        for (&r, &a) in scan.ranges.iter().zip(&scan.angles) {
+            if !r.is_finite() || r < min_r || r >= max_r {
+                continue;
+            }
+            let (s, c) = a.sin_cos();
+            if r < usable_r {
+                hits.push([r * c, r * s]);
+            } else {
+                free_only.push([usable_r * c, usable_r * s]);
+            }
+        }
+        Self { hits, free_only }
+    }
+}
+
+pub fn to_world<'a>(pts: &'a [[f32; 2]], pose: &RobotPose) -> impl Iterator<Item = [f32; 2]> + 'a {
+    let (s, c) = pose.theta.sin_cos();
+    let (px, py) = (pose.x, pose.y);
+    pts.iter()
+        .map(move |&[x, y]| [px + c * x - s * y, py + s * x + c * y])
 }
 
 /* ----------------------------- Define ImuState ---------------------------- */
