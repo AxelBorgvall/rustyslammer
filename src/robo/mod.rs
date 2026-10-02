@@ -96,25 +96,25 @@ pub struct ScanPoints {
 }
 
 impl ScanPoints {
-    pub fn from_scan(scan: &LidarScan, min_r: f32, usable_r: f32, max_r: f32) -> Self {
+    pub fn from_scan(scan: &LidarScan, max_range: f32,) -> Self {
         let mut hits = Vec::with_capacity(scan.ranges.len());
         let mut free_only = Vec::new();
         for (&r, &a) in scan.ranges.iter().zip(&scan.angles) {
-            if !r.is_finite() || r < min_r || r >= max_r {
+            if !r.is_finite()  {
                 continue;
             }
             let (s, c) = a.sin_cos();
-            if r < usable_r {
+            if r < max_range {
                 hits.push([r * c, r * s]);
             } else {
-                free_only.push([usable_r * c, usable_r * s]);
+                free_only.push([max_range * c, max_range * s]);
             }
         }
         Self { hits, free_only }
     }
 }
 
-pub fn to_world<'a>(pts: &'a [[f32; 2]], pose: &RobotPose) -> impl Iterator<Item = [f32; 2]> + 'a {
+pub fn to_world<'a>(pts: &'a [[f32; 2]], pose: RobotPose) -> impl Iterator<Item = [f32; 2]> + 'a {
     let (s, c) = pose.theta.sin_cos();
     let (px, py) = (pose.x, pose.y);
     pts.iter()

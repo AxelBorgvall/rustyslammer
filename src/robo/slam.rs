@@ -1,6 +1,7 @@
+use crate::robo::ScanPoints;
 use crate::robo::{
     Chunk, LidarScan, Map, MapQuery, RobotPose, SlamImage, bresenham::Bresenham, cell_mut,
-    world2cell,
+    world2cell,to_world
 };
 use arc_swap::ArcSwap;
 use rand::thread_rng;
@@ -88,30 +89,30 @@ impl OGMapping {
         }
     }
 
-    pub fn update_map(&self,map: &mut Map, pose: RobotPose, lidarscan:&LidarScan) {
-        let (s, c) = pose.theta.sin_cos();
+    pub fn update_map(&self,map: &mut Map, pose: RobotPose, beams:&ScanPoints) {
         let start = world2cell(pose.x, pose.y, self.dx);
-		
-		let beams=
-        for &[bx, by] in beams {
-            let (wx, wy) = (pose.x + c * bx - s * by, pose.y + s * bx + c * by);
-            let hit = world2cell(wx, wy, self.dx);
+
+        for [bx, by] in to_world(&beams.hits, pose) {
+            let hit = world2cell(bx, by, self.dx);
             for (cx, cy) in Bresenham::new(start, hit) {
-                // adapt to your module's API
                 if (cx, cy) == hit {
                     break;
                 }
-                cell_mut(map, cx, cy).visits += 1;
+                cell_mut(map, cx, cy).add_free();
             }
-            let cell = cell_mut(map, hit.0, hit.1);
-            cell.visits += 1;
-            cell.hits += 1;
-            let n = cell.hits as f32;
-            cell.mx += (wx / dx - hit.0 as f32 - cell.mx) / n; // running mean
-            cell.my += (wy / dx - hit.1 as f32 - cell.my) / n;
+			cell_mut(map, hit.0, hit.1).add_hit((bx/self.dx)-(hit.0 as f32), by/self.dx-(hit.1 as f32));
         }
+		for [bx,by] in to_world(&beams.free_only, pose){
+			let end=world2cell(bx, by, self.dx);
+			for (cx,cy) in Bresenham::new(start, end){
+				cell_mut(map, cx, cy).add_free();
+			}
+		}
     }
-    fn scanmatch_hillclimb(&self, prior: RobotPose, imu_data: RobotPose, lidar_data: &LidarScan) {}
+
+    fn scanmatch_hillclimb(&self, prior: RobotPose, imu_data: RobotPose, lidar_data: &LidarScan) {
+
+	}
     pub fn update_positions(&mut self, imu_data: RobotPose, lidar_data: &LidarScan, dt: f32) {
         // Compute priors
         let delta = (imu_data - self.last_imu);
