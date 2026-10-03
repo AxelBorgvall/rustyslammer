@@ -7,6 +7,7 @@ pub mod slam;
 
 // use std::collections::HashMap;
 use arc_swap::ArcSwap;
+use rand_distr::num_traits::real;
 use rustc_hash::FxHashMap;
 use std::ops::{Add, Div, Mul, Sub};
 use std::sync::{Arc, Mutex};
@@ -58,6 +59,81 @@ const CHUNK_SIZE: usize = CHUNK_L * CHUNK_L;
 pub type Chunk = [Cell; CHUNK_SIZE];
 pub type Map = FxHashMap<(i32, i32), Arc<Chunk>>;
 
+pub struct ChunkCache<const N: usize> {
+    keys: [(i32, i32); N],
+    ptrs: [*mut Chunk; N],
+    next: usize,
+}
+impl<const N: usize> ChunkCache<N> {
+    fn new() -> Self {
+        Self {
+            keys: [(i32::MAX, i32::MAX); N],
+            ptrs: [std::ptr::null_mut(); N],
+            next: 0,
+        }
+    }
+    #[inline]
+    fn get_mut(&mut self, map: &mut Map, key: (i32, i32)) -> *mut Chunk {
+        for i in 0..N {
+            if self.keys[i] == key {
+                return self.ptrs[i];
+            }
+        }
+        // Chunk not in cache
+        let chunk = map
+            .entry(key)
+            .or_insert_with(|| Arc::new([Cell::default(); CHUNK_SIZE]));
+        let p = Arc::make_mut(chunk) as *mut _;
+        self.ptrs[self.next] = p;
+        self.keys[self.next] = key;
+        self.next = (self.next + 1) % N;
+        p
+    }
+
+    #[inline]
+    fn get(&mut self, map: &mut Map, key: (i32, i32)) -> *const Chunk {
+        for i in 0..N {
+            if self.keys[i] == key {
+                return self.ptrs[i];
+            }
+        }
+        // Chunk not in cache
+        let chunk = map
+            .entry(key)
+            .or_insert_with(|| Arc::new([Cell::default(); CHUNK_SIZE]));
+        let p = Arc::make_mut(chunk) as *mut _;
+        self.ptrs[self.next] = p;
+        self.keys[self.next] = key;
+        self.next = (self.next + 1) % N;
+        p
+    }
+
+    #[inline]
+    fn add_free(&mut self, map: &mut Map, pos: (i32, i32)) {
+        const L: i32 = CHUNK_L as i32;
+        let chunk_key = (pos.0.div_euclid(L), pos.1.div_euclid(L));
+        let local_x = pos.0.rem_euclid(L) as usize;
+        let local_y = pos.1.rem_euclid(L) as usize;
+        unsafe {
+            (*self.get_mut(map, chunk_key))[local_x + local_y * CHUNK_L].add_free();
+        }
+    }
+
+    #[inline]
+    fn add_hit(&mut self, map: &mut Map, idx_pos: (i32, i32),real_pos:(f32,f32),dx:f32) {
+		const L: i32 = CHUNK_L as i32;
+        let chunk_key = (idx_pos.0.div_euclid(L), idx_pos.1.div_euclid(L));
+        let local_x = idx_pos.0.rem_euclid(L) as usize;
+        let local_y = idx_pos.1.rem_euclid(L) as usize;
+        unsafe {
+            (*self.get_mut(map, chunk_key))[local_x + local_y * CHUNK_L].add_hit(
+				(real_pos.0/dx)-(idx_pos.0 as f32),
+				(real_pos.1/dx)-(idx_pos.1 as f32),
+			);
+        }
+	}
+}
+
 #[derive(Debug, Clone, Default)]
 pub struct MapQuery {
     chunk_coord: (i32, i32),
@@ -96,11 +172,11 @@ pub struct ScanPoints {
 }
 
 impl ScanPoints {
-    pub fn from_scan(scan: &LidarScan, max_range: f32,) -> Self {
+    pub fn from_scan(scan: &LidarScan, max_range: f32) -> Self {
         let mut hits = Vec::with_capacity(scan.ranges.len());
         let mut free_only = Vec::new();
         for (&r, &a) in scan.ranges.iter().zip(&scan.angles) {
-            if !r.is_finite()  {
+            if !r.is_finite() {
                 continue;
             }
             let (s, c) = a.sin_cos();
