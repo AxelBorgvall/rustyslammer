@@ -32,7 +32,7 @@ pub trait Slam: Send {
     ) -> JoinHandle<()>;
 }
 
-pub struct OGMappingCore{
+pub struct OGMappingCore {
     // Params
     pub dx: f32,
     pub resampling_temp: f32,
@@ -50,9 +50,15 @@ pub struct OGMappingCore{
     pub max_halvings: i32,
 }
 impl OGMappingCore {
-	
-    fn scanmatch_hillclimb(&mut self, prior: RobotPose, map:&mut Map, scan_pts: &ScanPoints) {
-		const L:i32=CHUNK_L as i32;
+    fn searchspace_in_chunk(&self, chunk_pos: (i32, i32)) -> bool {
+        const L: i32 = CHUNK_L as i32;
+        self.search_distance >= chunk_pos.0
+            && L - self.search_distance < chunk_pos.0
+            && self.search_distance >= chunk_pos.1
+            && L - self.search_distance < chunk_pos.1
+    }
+    fn scanmatch_hillclimb(&mut self, prior: RobotPose, map: &mut Map, scan_pts: &ScanPoints) {
+        const L: i32 = CHUNK_L as i32;
         let mut chunk_cache: ChunkCache<CHUNKCACHE_SIZE> = ChunkCache::new();
 
         let mut stepsize_xy = self.xy_step;
@@ -60,22 +66,31 @@ impl OGMappingCore {
         let mut n_halvings = 0;
         let mut n_steps = 0;
         let mut current_pose = prior;
-		let mut current_lp=0.0f32;
-		// Compute the lp of the current pose
-		for b_pos in scan_pts.hits.iter(){
-			let hit_cell= world2cell(b_pos[0], b_pos[1], self.dx);
-			let chunk_coords=(hit_cell.0.rem_euclid(L),hit_cell.1.rem_euclid(L));
-			let chunk_key=(hit_cell.0.div_euclid(L),hit_cell.1.div_euclid(L));
-			// Fast track
-			if self.searchspace_in_chunk(chunk_coords){
-				let chunk=chunk_cache.get(map, chunk_key);
-			}
-			
-		}
+        let mut current_lp = 0.0f32;
+		
+		let world_pts=
+        // Compute the lp of the current pose
+        for b_pos in to_world(&scan_pts.hits, prior) {
+            let hit_cell = world2cell(b_pos[0], b_pos[1], self.dx);
+            let (ix, iy) = (hit_cell.0.rem_euclid(L), hit_cell.1.rem_euclid(L));
+            let chunk_key = (hit_cell.0.div_euclid(L), hit_cell.1.div_euclid(L));
+            let r = self.search_distance;
+            // Fast track
+            if self.searchspace_in_chunk((ix,iy)) {
+                let chunk = chunk_cache.get(map, chunk_key);
+				let mut highest_lp=f32::NEG_INFINITY;
 
+                for i in ix - r..=ix + r {
+                    for j in iy - r..=iy + r {
+						let (i,j)=(i as usize,j as usize);
+						
+					}
+                }
+            }
+        }
 
         while n_halvings < self.max_halvings && n_steps < self.max_steps {
-			let mut cand_lp = [0.0f32; 6];
+            let mut cand_lp = [0.0f32; 6];
             let test_poses = [
                 RobotPose {
                     x: current_pose.x + stepsize_xy,
@@ -106,13 +121,6 @@ impl OGMappingCore {
             for b_pos in scan_pts.hits.iter() {}
         }
     }
-	fn searchspace_in_chunk(&self,chunk_pos:(i32,i32))->bool{
-		const L:i32=CHUNK_L as i32;
-		self.search_distance>=chunk_pos.0&&
-		L-self.search_distance<chunk_pos.0&&
-		self.search_distance>=chunk_pos.1&&
-		L-self.search_distance<chunk_pos.1
-	}
     pub fn update_map(&self, map: &mut Map, pose: RobotPose, beams: &ScanPoints) {
         const L: i32 = CHUNK_L as i32;
         let start = world2cell(pose.x, pose.y, self.dx);
@@ -141,7 +149,7 @@ impl OGMappingCore {
 }
 
 pub struct OGMapping {
-	pub core:OGMappingCore,
+    pub core: OGMappingCore,
     // State
     pub weights: Vec<f32>,
     pub particles: Vec<RobotPose>,
@@ -152,7 +160,7 @@ pub struct OGMapping {
 
 impl OGMapping {
     pub fn new(n_part: usize, dx: f32) -> Self {
-		let core=OGMappingCore{
+        let core = OGMappingCore {
             dx: dx,
             resampling_temp: 8.0,
             n_part: n_part,
@@ -165,9 +173,9 @@ impl OGMapping {
             max_steps: 60,
             theta_step: 0.05,
             max_halvings: 4,
-		};
+        };
         Self {
-			core: core,
+            core: core,
             particles: vec![RobotPose::default(); n_part],
             particle_maps: vec![Map::default(); n_part],
             weights: vec![1.0; n_part],
@@ -182,34 +190,34 @@ impl OGMapping {
         self.last_imu = imu_data;
 
         let mut rng = thread_rng();
-        let noise_dist_x = Normal::new(0.0, (delta.x / dt * self.core.vel_noise).abs() + 0.005).unwrap();
-        let noise_dost_y = Normal::new(0.0, (delta.y / dt * self.core.vel_noise).abs() + 0.005).unwrap();
+        let noise_dist_x =
+            Normal::new(0.0, (delta.x / dt * self.core.vel_noise).abs() + 0.005).unwrap();
+        let noise_dost_y =
+            Normal::new(0.0, (delta.y / dt * self.core.vel_noise).abs() + 0.005).unwrap();
         let noise_dist_theta =
             Normal::new(0.0, (delta.theta / dt * self.core.ang_noise).abs() + 0.01).unwrap();
 
-        let priors= self
-            .particles
-            .iter()
-            .map(|particle| {
-                RobotPose {
-                    x: particle.x + noise_dist_x.sample(&mut rng),
-                    y: particle.y + noise_dost_y.sample(&mut rng),
-                    theta: particle.theta + noise_dist_theta.sample(&mut rng),
-                } + delta
-            });
+        let priors = self.particles.iter().map(|particle| {
+            RobotPose {
+                x: particle.x + noise_dist_x.sample(&mut rng),
+                y: particle.y + noise_dost_y.sample(&mut rng),
+                theta: particle.theta + noise_dist_theta.sample(&mut rng),
+            } + delta
+        });
         let sigsqr: f32 = (0.05f32).powi(2);
         let scan_pts = ScanPoints::from_scan(lidar_data, lidar_data.max_distance * 0.98);
 
-        for (i,prior) in priors.enumerate() {
-            self.core.scanmatch_hillclimb(prior,&mut self.particle_maps[i] ,&scan_pts);
+        for (i, prior) in priors.enumerate() {
+            self.core
+                .scanmatch_hillclimb(prior, &mut self.particle_maps[i], &scan_pts);
         }
     }
-	pub fn update_maps(&mut self,lidar_scan:LidarScan){
-		let scan_pts=ScanPoints::from_scan(&lidar_scan, lidar_scan.max_distance*0.98);
-		for (pose,map) in self.particles.iter().zip(self.particle_maps.iter_mut()){
-			self.core.update_map(map, *pose, &scan_pts);
-		}
-	}
+    pub fn update_maps(&mut self, lidar_scan: LidarScan) {
+        let scan_pts = ScanPoints::from_scan(&lidar_scan, lidar_scan.max_distance * 0.98);
+        for (pose, map) in self.particles.iter().zip(self.particle_maps.iter_mut()) {
+            self.core.update_map(map, *pose, &scan_pts);
+        }
+    }
 }
 
 impl Slam for OGMapping {
