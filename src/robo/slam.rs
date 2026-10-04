@@ -20,6 +20,7 @@ use std::{
 };
 
 const CHUNKCACHE_SIZE: usize = 10;
+const MAX_RANGE_GUESS: f32 = 12.0;
 
 pub trait Slam: Send {
     fn spawn(
@@ -48,6 +49,12 @@ pub struct OGMappingCore {
     pub max_steps: i32,
     pub theta_step: f32,
     pub max_halvings: i32,
+    pub occ_thresh: f32,
+    pub inv_2sigsqr: f32,
+    pub z_hit: f32,
+    pub z_rand: f32,
+    pub rand_term: f32,
+    pub miss_lp: f32,
 }
 impl OGMappingCore {
     fn searchspace_in_chunk(&self, chunk_pos: (i32, i32)) -> bool {
@@ -57,7 +64,98 @@ impl OGMappingCore {
             && self.search_distance >= chunk_pos.1
             && L - self.search_distance < chunk_pos.1
     }
-    fn scanmatch_hillclimb(&mut self, prior: RobotPose, map: &mut Map, scan_pts: &ScanPoints) {
+    #[inline]
+    fn fast_search(
+        &self,
+        chunk_cache: &mut ChunkCache<CHUNKCACHE_SIZE>,
+        map: &mut Map,
+        hit_cell: (i32, i32),
+        i_pos: (i32, i32),
+        b_pos: (f32, f32),
+    ) -> f32 {
+        const L: i32 = CHUNK_L as i32;
+        let r = self.search_distance;
+
+        let chunk_key = (hit_cell.0.div_euclid(L), hit_cell.1.div_euclid(L));
+        let chunk_ptr = chunk_cache.get(map, chunk_key);
+        let chunk_ref = unsafe { &*chunk_ptr };
+        let mut best_d2 = f32::INFINITY;
+
+        for i in i_pos.0 - r..=i_pos.0 + r {
+            for j in i_pos.1 - r..=i_pos.1 + r {
+                let (i_idx, j_idx) = (i as usize, j as usize);
+                let cell = chunk_ref[i_idx + j_idx * CHUNK_L];
+                if !cell.occupied(self.occ_thresh) {
+                    continue;
+                }
+                let ex = b_pos.0 - ((hit_cell.0 + i - i_pos.0) as f32 + cell.mx) * self.dx;
+                let ey = b_pos.1 - ((hit_cell.1 + j - i_pos.1) as f32 + cell.my) * self.dx;
+                best_d2 = best_d2.min(ex.powi(2) + ey.powi(2));
+            }
+        }
+        best_d2
+    }
+    #[inline]
+    fn slow_search(
+        &self,
+        chunk_cache: &mut ChunkCache<CHUNKCACHE_SIZE>,
+        map: &mut Map,
+        hit_cell: (i32, i32),
+        b_pos: (f32, f32),
+    ) -> f32 {
+        const L: i32 = CHUNK_L as i32;
+        let r = self.search_distance;
+        let mut best_d2 = f32::INFINITY;
+        for i in hit_cell.0 - r..=hit_cell.0 + r {
+            for j in hit_cell.1 - r..=hit_cell.1 + r {
+                let chunk_key = (i.div_euclid(L), j.div_euclid(L));
+                let (ix, iy) = (i.rem_euclid(L) as usize, j.rem_euclid(L) as usize);
+                let chunk_ptr = chunk_cache.get(map, chunk_key);
+                let chunk_ref = unsafe { &*chunk_ptr };
+
+                let cell = chunk_ref[ix + iy * CHUNK_L];
+                if !cell.occupied(self.occ_thresh) {
+                    continue;
+                }
+                let ex = b_pos.0 - (i as f32 + cell.mx) * self.dx;
+                let ey = b_pos.1 - (j as f32 + cell.my) * self.dx;
+                best_d2 = best_d2.min(ex.powi(2) + ey.powi(2));
+            }
+        }
+        best_d2
+    }
+    #[inline]
+    fn beam_lp(&self, best_d2: f32) -> f32 {
+        if best_d2.is_finite() {
+            (self.z_hit * (-best_d2 * self.inv_2sigsqr).exp() + self.rand_term).ln()
+        } else {
+            self.miss_lp
+        }
+    }
+    fn single_lp(
+        &self,
+        pose: RobotPose,
+        map: &mut Map,
+        chunk_cache: &mut ChunkCache<CHUNKCACHE_SIZE>,
+        scan_pts: &ScanPoints,
+    ) -> f32 {
+        const L: i32 = CHUNK_L as i32;
+
+        let mut cum_lp = 0.0f32;
+		for b_pos in to_world(&scan_pts.hits, pose){
+			let hit_cell=world2cell(b_pos[0], b_pos[1], self.dx);
+            let (ix, iy) = (hit_cell.0.rem_euclid(L), hit_cell.1.rem_euclid(L));
+			let best_d2=if self.searchspace_in_chunk((ix,iy)){
+				self.fast_search(chunk_cache, map, hit_cell, (ix,iy), (b_pos[0],b_pos[1]))
+			}else{
+				self.slow_search(chunk_cache, map, hit_cell, (b_pos[0],b_pos[1]))
+			};
+			cum_lp+=self.beam_lp(best_d2);
+		}
+        cum_lp
+    }
+
+    fn scanmatch_hillclimb(&self, prior: RobotPose, map: &mut Map, scan_pts: &ScanPoints) {
         const L: i32 = CHUNK_L as i32;
         let mut chunk_cache: ChunkCache<CHUNKCACHE_SIZE> = ChunkCache::new();
 
@@ -66,29 +164,8 @@ impl OGMappingCore {
         let mut n_halvings = 0;
         let mut n_steps = 0;
         let mut current_pose = prior;
-        let mut current_lp = 0.0f32;
-		
-		let world_pts=
-        // Compute the lp of the current pose
-        for b_pos in to_world(&scan_pts.hits, prior) {
-            let hit_cell = world2cell(b_pos[0], b_pos[1], self.dx);
-            let (ix, iy) = (hit_cell.0.rem_euclid(L), hit_cell.1.rem_euclid(L));
-            let chunk_key = (hit_cell.0.div_euclid(L), hit_cell.1.div_euclid(L));
-            let r = self.search_distance;
-            // Fast track
-            if self.searchspace_in_chunk((ix,iy)) {
-                let chunk = chunk_cache.get(map, chunk_key);
-				let mut highest_lp=f32::NEG_INFINITY;
-
-                for i in ix - r..=ix + r {
-                    for j in iy - r..=iy + r {
-						let (i,j)=(i as usize,j as usize);
-						
-					}
-                }
-            }
-        }
-
+        let mut current_lp =self.single_lp(current_pose, map, &mut chunk_cache, scan_pts);
+ 
         while n_halvings < self.max_halvings && n_steps < self.max_steps {
             let mut cand_lp = [0.0f32; 6];
             let test_poses = [
@@ -121,7 +198,8 @@ impl OGMappingCore {
             for b_pos in scan_pts.hits.iter() {}
         }
     }
-    pub fn update_map(&self, map: &mut Map, pose: RobotPose, beams: &ScanPoints) {
+
+    fn update_map(&self, map: &mut Map, pose: RobotPose, beams: &ScanPoints) {
         const L: i32 = CHUNK_L as i32;
         let start = world2cell(pose.x, pose.y, self.dx);
 
@@ -160,6 +238,9 @@ pub struct OGMapping {
 
 impl OGMapping {
     pub fn new(n_part: usize, dx: f32) -> Self {
+        let z_hit = 0.95f32;
+        let z_rand = 1.0 - z_hit;
+        let rand_term = z_rand / MAX_RANGE_GUESS;
         let core = OGMappingCore {
             dx: dx,
             resampling_temp: 8.0,
@@ -173,6 +254,12 @@ impl OGMapping {
             max_steps: 60,
             theta_step: 0.05,
             max_halvings: 4,
+            occ_thresh: 0.1,
+            inv_2sigsqr: (0.05f32).powi(-2) / 2.0,
+            z_hit: z_hit,
+            z_rand: z_rand,
+            rand_term: rand_term,
+            miss_lp: rand_term.ln(),
         };
         Self {
             core: core,
@@ -204,7 +291,6 @@ impl OGMapping {
                 theta: particle.theta + noise_dist_theta.sample(&mut rng),
             } + delta
         });
-        let sigsqr: f32 = (0.05f32).powi(2);
         let scan_pts = ScanPoints::from_scan(lidar_data, lidar_data.max_distance * 0.98);
 
         for (i, prior) in priors.enumerate() {

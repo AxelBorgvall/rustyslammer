@@ -110,7 +110,7 @@ impl SimEnv {
 
         Self {
             n_rays: nrays,
-            max_range: 8.0,
+            max_range: 12.0,
             spread: spread,
             speed: 0.2,
             angvel: 0.2,
