@@ -45,3 +45,22 @@ pub fn load_data(path: &str) -> io::Result<(u32, u32, f32, Vec<bool>)> {
 
     Ok((height, width, dx, data))
 }
+
+
+pub fn lerp_rgb(a: u32, b: u32, t: f32) -> u32 {
+    let t = t.clamp(0.0, 1.0);
+
+    let ar = ((a >> 16) & 0xFF) as f32;
+    let ag = ((a >> 8) & 0xFF) as f32;
+    let ab = (a & 0xFF) as f32;
+
+    let br = ((b >> 16) & 0xFF) as f32;
+    let bg = ((b >> 8) & 0xFF) as f32;
+    let bb = (b & 0xFF) as f32;
+
+    let r = (ar + (br - ar) * t) as u32;
+    let g = (ag + (bg - ag) * t) as u32;
+    let b = (ab + (bb - ab) * t) as u32;
+
+    (r << 16) | (g << 8) | b
+}

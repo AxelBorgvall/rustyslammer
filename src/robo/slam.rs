@@ -1,3 +1,4 @@
+use crate::robo::io::lerp_rgb;
 use crate::robo::{CHUNK_L, CHUNK_SIZE, Cell, ChunkCache, ScanPoints, to_world_beam_major};
 use crate::robo::{
     Chunk, LidarScan, Map, MapQuery, RobotPose, SlamImage, bresenham::Bresenham, cell_mut,
@@ -10,6 +11,7 @@ use std::iter::Scan;
 use std::thread::sleep;
 use std::time::Duration;
 use std::time::Instant;
+use std::usize;
 use std::{
     collections::HashMap,
     sync::{
@@ -155,7 +157,12 @@ impl OGMappingCore {
         cum_lp
     }
 
-    fn scanmatch_hillclimb(&self, prior: RobotPose, map: &mut Map, scan_pts: &ScanPoints) ->RobotPose{
+    fn scanmatch_hillclimb(
+        &self,
+        prior: RobotPose,
+        map: &mut Map,
+        scan_pts: &ScanPoints,
+    ) -> RobotPose {
         const L: i32 = CHUNK_L as i32;
         let mut chunk_cache: ChunkCache<CHUNKCACHE_SIZE> = ChunkCache::new();
 
@@ -219,17 +226,17 @@ impl OGMappingCore {
                 .enumerate()
                 .max_by(|(_, a), (_, b)| a.total_cmp(b))
                 .unwrap();
-			if best_lp>current_lp{
-				current_pose=test_poses[best_cand];
-				current_lp=best_lp;
-				n_steps+=1;
-			}else{
-				stepsize_xy*=0.5;
-				stepsize_theta*=0.5;
-				n_halvings+=1;
-			}
+            if best_lp > current_lp {
+                current_pose = test_poses[best_cand];
+                current_lp = best_lp;
+                n_steps += 1;
+            } else {
+                stepsize_xy *= 0.5;
+                stepsize_theta *= 0.5;
+                n_halvings += 1;
+            }
         }
-		current_pose
+        current_pose
     }
 
     fn update_map(&self, map: &mut Map, pose: RobotPose, beams: &ScanPoints) {
@@ -267,6 +274,7 @@ pub struct OGMapping {
     pub particle_maps: Vec<Map>,
     pub last_imu: RobotPose,
     pub last_update: f32,
+    pub screenbuffer: Vec<u32>,
 }
 
 impl OGMapping {
@@ -301,6 +309,7 @@ impl OGMapping {
             weights: vec![1.0; n_part],
             last_imu: RobotPose::default(),
             last_update: 0.0,
+            screenbuffer: vec![],
         }
     }
 
@@ -337,6 +346,69 @@ impl OGMapping {
             self.core.update_map(map, *pose, &scan_pts);
         }
     }
+    pub fn render(&mut self) ->(usize,usize){
+        let keys = self.particle_maps.iter().flat_map(|map| map.keys());
+        let mut min: (i32, i32) = (i32::MAX, i32::MAX);
+        let mut max: (i32, i32) = (i32::MIN, i32::MIN);
+        for key in keys {
+            min.0 = min.0.min(key.0);
+            min.1 = min.1.min(key.1);
+            max.0 = max.0.max(key.0);
+            max.1 = max.1.max(key.1);
+        }
+        // Add offset to move min to origin
+        let offset = (-min.0, -min.1);
+        let size = ((max.0 - min.0) as usize, (max.1 - min.1) as usize);
+        // Grey infill
+        self.screenbuffer.resize(size.0 * size.1, 0x00808080);
+        self.screenbuffer.fill(0x00808080);
+
+        // draw all the maps
+        for map in self.particle_maps.iter() {
+            for (key, chunk) in map.iter() {
+                let corner = ((key.0 + offset.0) as usize, (key.1 + offset.1) as usize);
+                for i in 0..CHUNK_L {
+                    for j in 0..CHUNK_L {
+                        let activation = chunk[i + j * CHUNK_L].occupancy().clamp(0.0, 1.0)
+                            / self.core.n_part as f32;
+                        let activation = (activation * 255.0) as u32;
+                        let color = activation << 16 | activation << 8 | activation;
+
+                        self.screenbuffer[i + corner.0 + (corner.1 + j) * size.0] = (color);
+                    }
+                }
+            }
+        }
+		// Here come the robots
+        for pose in self.particles.iter() {
+            let (s, c) = pose.theta.sin_cos();
+            let line: Vec<(i32, i32)> = Bresenham::new(
+                (
+                    (pose.x/self.core.dx - c * 1.5 ) as i32,
+                    (pose.y/ self.core.dx - s * 1.5 ) as i32,
+                ),
+                (
+                    (pose.x/ self.core.dx + c * 1.5 ) as i32,
+                    (pose.y/ self.core.dx + s * 1.5 ) as i32,
+                ),
+            )
+            .collect();
+            let n = line.len();
+            for (i, (x, y)) in line.into_iter().enumerate() {
+                let t = i as f32 / (n - 1).max(1) as f32;
+
+                // ass -> nose
+                let color = lerp_rgb(0x000000FF, 0x00FF0000, t);
+				let pos:(usize,usize)=(
+					(x+offset.0) as usize,
+					(y+offset.1) as usize,
+				);
+				self.screenbuffer[pos.0+pos.1*size.0]=color;
+				
+            }
+        }
+		size
+    }
 }
 
 impl Slam for OGMapping {
@@ -350,7 +422,8 @@ impl Slam for OGMapping {
     ) -> JoinHandle<()> {
         thread::spawn(move || {
             // Basic Slam loop goes here
-            while !shutdown_flag.load(Relaxed) {}
+            while !shutdown_flag.load(Relaxed) {
+			}
         })
     }
 }
