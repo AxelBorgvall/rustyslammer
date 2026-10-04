@@ -120,18 +120,18 @@ impl<const N: usize> ChunkCache<N> {
     }
 
     #[inline]
-    fn add_hit(&mut self, map: &mut Map, idx_pos: (i32, i32),real_pos:(f32,f32),dx:f32) {
-		const L: i32 = CHUNK_L as i32;
+    fn add_hit(&mut self, map: &mut Map, idx_pos: (i32, i32), real_pos: (f32, f32), dx: f32) {
+        const L: i32 = CHUNK_L as i32;
         let chunk_key = (idx_pos.0.div_euclid(L), idx_pos.1.div_euclid(L));
         let local_x = idx_pos.0.rem_euclid(L) as usize;
         let local_y = idx_pos.1.rem_euclid(L) as usize;
         unsafe {
             (*self.get_mut(map, chunk_key))[local_x + local_y * CHUNK_L].add_hit(
-				(real_pos.0/dx)-(idx_pos.0 as f32),
-				(real_pos.1/dx)-(idx_pos.1 as f32),
-			);
+                (real_pos.0 / dx) - (idx_pos.0 as f32),
+                (real_pos.1 / dx) - (idx_pos.1 as f32),
+            );
         }
-	}
+    }
 }
 
 #[derive(Debug, Clone, Default)]
@@ -195,6 +195,73 @@ pub fn to_world<'a>(pts: &'a [[f32; 2]], pose: RobotPose) -> impl Iterator<Item 
     let (px, py) = (pose.x, pose.y);
     pts.iter()
         .map(move |&[x, y]| [px + c * x - s * y, py + s * x + c * y])
+}
+
+// Private structs for my stupid beam major point iterator
+#[derive(Clone, Copy)]
+struct PoseTransform {
+    x: f32,
+    y: f32,
+    s: f32,
+    c: f32,
+}
+impl PoseTransform {
+    fn new(pose: RobotPose) -> Self {
+        let (s, c) = pose.theta.sin_cos();
+        Self {
+            x: pose.x,
+            y: pose.y,
+            s,
+            c,
+        }
+    }
+    #[inline]
+    fn transform(self, [x, y]: [f32; 2]) -> [f32; 2] {
+        [
+            self.x + self.c * x - self.s * y,
+            self.y + self.s * x + self.c * y,
+        ]
+    }
+}
+struct BeamMajor<'a> {
+    pts: &'a [[f32; 2]],
+    poses: Vec<PoseTransform>,
+    beam_idx: usize,
+    pose_idx: usize,
+}
+impl<'a> Iterator for BeamMajor<'a> {
+    type Item = (usize, [f32; 2]);
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.pts.is_empty() || self.poses.is_empty() {
+            return None;
+        }
+
+        if self.beam_idx >= self.pts.len() {
+            return None;
+        }
+        let pt = self.pts[self.beam_idx];
+        let pose_idx = self.pose_idx;
+        let world = self.poses[pose_idx].transform(pt);
+        self.pose_idx += 1;
+        if self.pose_idx == self.poses.len() {
+            self.pose_idx = 0;
+            self.beam_idx += 1;
+        }
+
+        Some((pose_idx, world))
+    }
+}
+pub fn to_world_beam_major<'a>(
+	pts: &'a [[f32; 2]],
+	poses:&[RobotPose],
+)->impl Iterator<Item = (usize,[f32;2])>+'a{
+	let pose_trans=poses.iter().copied().map(PoseTransform::new).collect();
+	BeamMajor {
+		pts,
+		poses:pose_trans,
+		beam_idx:0,
+		pose_idx:0,
+	}
 }
 
 /* ----------------------------- Define ImuState ---------------------------- */

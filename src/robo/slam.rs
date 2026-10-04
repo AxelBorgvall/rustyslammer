@@ -1,4 +1,4 @@
-use crate::robo::{CHUNK_L, CHUNK_SIZE, Cell, ChunkCache, ScanPoints};
+use crate::robo::{CHUNK_L, CHUNK_SIZE, Cell, ChunkCache, ScanPoints, to_world_beam_major};
 use crate::robo::{
     Chunk, LidarScan, Map, MapQuery, RobotPose, SlamImage, bresenham::Bresenham, cell_mut,
     to_world, world2cell,
@@ -142,20 +142,20 @@ impl OGMappingCore {
         const L: i32 = CHUNK_L as i32;
 
         let mut cum_lp = 0.0f32;
-		for b_pos in to_world(&scan_pts.hits, pose){
-			let hit_cell=world2cell(b_pos[0], b_pos[1], self.dx);
+        for b_pos in to_world(&scan_pts.hits, pose) {
+            let hit_cell = world2cell(b_pos[0], b_pos[1], self.dx);
             let (ix, iy) = (hit_cell.0.rem_euclid(L), hit_cell.1.rem_euclid(L));
-			let best_d2=if self.searchspace_in_chunk((ix,iy)){
-				self.fast_search(chunk_cache, map, hit_cell, (ix,iy), (b_pos[0],b_pos[1]))
-			}else{
-				self.slow_search(chunk_cache, map, hit_cell, (b_pos[0],b_pos[1]))
-			};
-			cum_lp+=self.beam_lp(best_d2);
-		}
+            let best_d2 = if self.searchspace_in_chunk((ix, iy)) {
+                self.fast_search(chunk_cache, map, hit_cell, (ix, iy), (b_pos[0], b_pos[1]))
+            } else {
+                self.slow_search(chunk_cache, map, hit_cell, (b_pos[0], b_pos[1]))
+            };
+            cum_lp += self.beam_lp(best_d2);
+        }
         cum_lp
     }
 
-    fn scanmatch_hillclimb(&self, prior: RobotPose, map: &mut Map, scan_pts: &ScanPoints) {
+    fn scanmatch_hillclimb(&self, prior: RobotPose, map: &mut Map, scan_pts: &ScanPoints) ->RobotPose{
         const L: i32 = CHUNK_L as i32;
         let mut chunk_cache: ChunkCache<CHUNKCACHE_SIZE> = ChunkCache::new();
 
@@ -164,9 +164,10 @@ impl OGMappingCore {
         let mut n_halvings = 0;
         let mut n_steps = 0;
         let mut current_pose = prior;
-        let mut current_lp =self.single_lp(current_pose, map, &mut chunk_cache, scan_pts);
- 
+        let mut current_lp = self.single_lp(current_pose, map, &mut chunk_cache, scan_pts);
+
         while n_halvings < self.max_halvings && n_steps < self.max_steps {
+            // Setup test poses
             let mut cand_lp = [0.0f32; 6];
             let test_poses = [
                 RobotPose {
@@ -194,9 +195,41 @@ impl OGMappingCore {
                     ..current_pose
                 },
             ];
+            // Compute prob
+            for (i, b_pos) in to_world_beam_major(&scan_pts.hits, &test_poses) {
+                let hit_cell = world2cell(b_pos[0], b_pos[1], self.dx);
+                let (ix, iy) = (hit_cell.0.rem_euclid(L), hit_cell.1.rem_euclid(L));
 
-            for b_pos in scan_pts.hits.iter() {}
+                let best_d2 = if self.searchspace_in_chunk((ix, iy)) {
+                    self.fast_search(
+                        &mut chunk_cache,
+                        map,
+                        hit_cell,
+                        (ix, iy),
+                        (b_pos[0], b_pos[1]),
+                    )
+                } else {
+                    self.slow_search(&mut chunk_cache, map, hit_cell, (b_pos[0], b_pos[1]))
+                };
+                cand_lp[i] += self.beam_lp(best_d2);
+            }
+            // Update current pose
+            let (best_cand, best_lp) = cand_lp
+                .into_iter()
+                .enumerate()
+                .max_by(|(_, a), (_, b)| a.total_cmp(b))
+                .unwrap();
+			if best_lp>current_lp{
+				current_pose=test_poses[best_cand];
+				current_lp=best_lp;
+				n_steps+=1;
+			}else{
+				stepsize_xy*=0.5;
+				stepsize_theta*=0.5;
+				n_halvings+=1;
+			}
         }
+		current_pose
     }
 
     fn update_map(&self, map: &mut Map, pose: RobotPose, beams: &ScanPoints) {
