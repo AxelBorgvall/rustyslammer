@@ -93,9 +93,6 @@ where
         let env_render_mailbox = Arc::new(ArcSwap::new(Arc::new(EnvImage::default())));
         let slam_render_mailbox = Arc::new(ArcSwap::new(Arc::new(SlamImage::default())));
 
-        // Init logger
-        env_logger::init();
-
         // launch threads
         let slam_handle = self.slam.spawn(
             shutdown_flag.clone(),

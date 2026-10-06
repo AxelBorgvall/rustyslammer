@@ -2,7 +2,6 @@ use crate::robo::{EnvImage, RobotPose, LidarScan, TwoWheelControl, bresenham::Br
 use arc_swap::ArcSwap;
 // use minifb::Key::Y;
 // use std::net::Shutdown;
-use log::{debug, info,};
 use std::sync::atomic::Ordering::Relaxed;
 use std::thread::JoinHandle;
 use std::time::Duration;
@@ -251,7 +250,7 @@ impl Environment for SimEnv {
         thread::spawn(move || {
             // Main simulation loop
             let mut count: u32 = 0;
-            info!("Environment thread starting now");
+            println!("Environment thread starting now");
 
             while !shutdown_flag.load(Relaxed) {
                 let current_control = {
@@ -260,11 +259,6 @@ impl Environment for SimEnv {
                 };
                 self.step_fwd(current_control);
 
-                debug!("Running iteration no: {}", count);
-                debug!(
-                    "Stepped fwd with ctrl: {:#?}. Moving robo to pose x:{}, y:{}, theta:{}",
-                    current_control, self.x, self.y, self.theta
-                );
                 count += 1;
                 // Publish lidardata
                 let scan = self.lidarscan();

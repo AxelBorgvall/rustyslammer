@@ -1,11 +1,10 @@
 use crate::robo::io::lerp_rgb;
-use crate::robo::{CHUNK_L, ChunkCache, ScanPoints, to_world_beam_major};
+use crate::robo::{CHUNK_L, CHUNK_SIZE, ChunkCache, ScanPoints, to_world_beam_major};
 use crate::robo::{
      LidarScan, Map, RobotPose, SlamImage, bresenham::Bresenham,
     to_world, world2cell,
 };
 use arc_swap::ArcSwap;
-use log::info;
 use rand::{Rng, thread_rng};
 use rand_distr::{Distribution, Normal};
 use std::time::Duration;
@@ -366,7 +365,7 @@ impl OGMapping {
         }
 
         let r: f32 = thread_rng().gen_range(0.0..1.0 / n as f32);
-        let counts = vec![0usize; n];
+        let mut counts = vec![0usize; n];
         let (mut i, mut cum_weight) = (0, self.weights[0]);
         for k in 0..n {
             let ptr = r + k as f32 / n as f32;
@@ -374,6 +373,7 @@ impl OGMapping {
                 i += 1;
                 cum_weight += self.weights[i];
             }
+			counts[i]+=1;
         }
 
         let old_poses = self.particles.clone();
@@ -381,7 +381,7 @@ impl OGMapping {
         let mut poses = Vec::with_capacity(n);
         let mut maps = Vec::with_capacity(n);
 
-        for (map, pose) in old_maps.into_iter().zip(old_poses.into_iter()) {
+        for (i,(map, pose)) in old_maps.into_iter().zip(old_poses.into_iter()).enumerate() {
             let c = counts[i];
             for _ in 1..c {
                 maps.push(map.clone());
@@ -394,6 +394,7 @@ impl OGMapping {
         }
         self.particles = poses;
         self.particle_maps = maps;
+		self.weights.fill(1.0 / n as f32);
     }
     pub fn render(&mut self) -> (usize, usize) {
 		const L:i32=CHUNK_L as i32;
@@ -412,10 +413,10 @@ impl OGMapping {
 			return (1,1);
 		}
         // Add offset to move min to origin
-        let offset = (-min.0*L, -min.1*L);
-        let size = (((max.0 - min.0)*L) as usize, ((max.1 - min.1)*L) as usize);
+        let offset = (-min.0, -min.1);
+        let size = ((max.0 - min.0) as usize, (max.1 - min.1) as usize);
         // Grey infill
-        self.screenbuffer.resize(size.0 * size.1, 0x00808080);
+        self.screenbuffer.resize(size.0 * size.1*CHUNK_SIZE, 0x00808080);
         self.screenbuffer.fill(0x00808080);
 
         // draw all the maps
@@ -454,7 +455,7 @@ impl OGMapping {
 
                 // ass -> nose
                 let color = lerp_rgb(0x000000FF, 0x00FF0000, t);
-                let pos: (usize, usize) = ((x + offset.0) as usize, (y + offset.1) as usize);
+                let pos: (usize, usize) = ((x + offset.0*L) as usize, (y + offset.1*L) as usize);
                 self.screenbuffer[pos.0 + pos.1 * size.0] = color;
             }
         }
@@ -473,7 +474,7 @@ impl Slam for OGMapping {
     ) -> JoinHandle<()> {
         thread::spawn(move || {
             // Basic Slam loop goes here
-            info!("Slam is starting now!");
+            println!("Slam is starting now!");
             let mut last_upos = Instant::now() - Duration::from_secs_f32(0.2);
             while !shutdown_flag.load(Relaxed) {
 				// Get imu and lidar
@@ -487,7 +488,7 @@ impl Slam for OGMapping {
                 let now = Instant::now();
                 let dt = now.duration_since(last_upos).as_secs_f32();
                 last_upos = now;
-				info!("dt={dt}");
+				println!("dt={dt}");
                 self.update_positions(imu_state, &lidar_data, dt);
                 self.update_maps(&lidar_data);
                 self.resample();
@@ -522,7 +523,7 @@ impl Slam for OGMapping {
                     }
                 }
 				if dt<0.005{
-					info!("sleepytime");
+					println!("sleepytime");
 					thread::sleep(Duration::from_millis(100));
 				}
             }
