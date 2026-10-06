@@ -396,6 +396,7 @@ impl OGMapping {
         self.particle_maps = maps;
     }
     pub fn render(&mut self) -> (usize, usize) {
+		const L:i32=CHUNK_L as i32;
         let keys = self.particle_maps.iter().flat_map(|map| map.keys());
         let mut min: (i32, i32) = (i32::MAX, i32::MAX);
         let mut max: (i32, i32) = (i32::MIN, i32::MIN);
@@ -411,8 +412,8 @@ impl OGMapping {
 			return (1,1);
 		}
         // Add offset to move min to origin
-        let offset = (-min.0, -min.1);
-        let size = ((max.0 - min.0) as usize, (max.1 - min.1) as usize);
+        let offset = (-min.0*L, -min.1*L);
+        let size = (((max.0 - min.0)*L) as usize, ((max.1 - min.1)*L) as usize);
         // Grey infill
         self.screenbuffer.resize(size.0 * size.1, 0x00808080);
         self.screenbuffer.fill(0x00808080);
@@ -420,7 +421,7 @@ impl OGMapping {
         // draw all the maps
         for map in self.particle_maps.iter() {
             for (key, chunk) in map.iter() {
-                let corner = ((key.0 + offset.0) as usize, (key.1 + offset.1) as usize);
+                let corner = (((key.0 + offset.0)*L) as usize, ((key.1 + offset.1)*L) as usize);
                 for i in 0..CHUNK_L {
                     for j in 0..CHUNK_L {
                         let activation = chunk[i + j * CHUNK_L].occupancy().clamp(0.0, 1.0)
@@ -520,6 +521,10 @@ impl Slam for OGMapping {
                         }
                     }
                 }
+				if dt<0.005{
+					info!("sleepytime");
+					thread::sleep(Duration::from_millis(100));
+				}
             }
         })
     }
