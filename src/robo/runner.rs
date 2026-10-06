@@ -3,11 +3,9 @@ use std::{
         Arc, RwLock,
         atomic::{AtomicBool, Ordering::Relaxed},
     },
-    time::Duration,
 };
 
 use arc_swap::ArcSwap;
-use log::{debug, info};
 use minifb::{Key, Window, WindowOptions};
 
 use crate::robo::{

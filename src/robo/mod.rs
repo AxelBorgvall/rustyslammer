@@ -1,3 +1,4 @@
+#![allow(unused)]
 pub mod bresenham;
 pub mod controller;
 pub mod environment;
@@ -6,13 +7,9 @@ pub mod runner;
 pub mod slam;
 
 // use std::collections::HashMap;
-use arc_swap::ArcSwap;
-use rand_distr::num_traits::real;
 use rustc_hash::FxHashMap;
 use std::ops::{Add, Div, Mul, Sub};
-use std::sync::{Arc, Mutex};
-use std::thread;
-use std::time::Duration;
+use std::sync::{Arc,};
 
 /* ------------------------------- Define map ------------------------------- */
 const COUNT_CAP: u16 = u16::MAX / 2;
@@ -134,14 +131,7 @@ impl<const N: usize> ChunkCache<N> {
     }
 }
 
-#[derive(Debug, Clone, Default)]
-pub struct MapQuery {
-    chunk_coord: (i32, i32),
-    localx: u16,
-    localy: u16,
-    prop_id: u32,
-}
-fn cell_mut(map: &mut Map, wx: i32, wy: i32) -> &mut Cell {
+fn _cell_mut(map: &mut Map, wx: i32, wy: i32) -> &mut Cell {
     const L: i32 = CHUNK_L as i32;
     let chunk = map
         .entry((wx.div_euclid(L), wy.div_euclid(L)))

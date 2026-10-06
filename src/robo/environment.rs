@@ -1,13 +1,12 @@
-use crate::robo::{EnvImage, RobotPose, LidarScan, Map, TwoWheelControl, bresenham::Bresenham, io};
+use crate::robo::{EnvImage, RobotPose, LidarScan, TwoWheelControl, bresenham::Bresenham, io};
 use arc_swap::ArcSwap;
 // use minifb::Key::Y;
 // use std::net::Shutdown;
-use log::{debug, error, info, warn};
+use log::{debug, info,};
 use std::sync::atomic::Ordering::Relaxed;
 use std::thread::JoinHandle;
 use std::time::Duration;
 use std::{
-    collections::HashMap,
     f32::consts::PI,
     sync::{Arc, RwLock, atomic::AtomicBool},
     thread,
@@ -26,9 +25,9 @@ pub trait Environment: Send {
 
 pub struct SimEnv {
     // Robot
-    pub n_rays: i32,
+    pub _n_rays: i32,
     pub max_range: f32,
-    pub spread: f32,
+    pub _spread: f32,
     pub speed: f32,
     pub angvel: f32,
     pub angles: Vec<f32>,
@@ -43,8 +42,8 @@ pub struct SimEnv {
     // Map
     pub nh: usize,
     pub nw: usize,
-    pub H: f32,
-    pub W: f32,
+    pub _h: f32,
+    pub _w: f32,
     pub dx: f32,
     pub grid: Vec<bool>,
 
@@ -61,7 +60,7 @@ fn checkaround(grid: &Vec<bool>, nh: usize, nw: usize, x: usize, y: usize, rad: 
     if (x + rad + 1 > nw) || (y + rad + 1 > nh) {
         return true;
     }
-    if (x < rad || y < rad) {
+    if x < rad || y < rad{
         return true;
     }
     for i in x - rad..x + rad {
@@ -96,7 +95,7 @@ impl SimEnv {
             }
         }
 
-        if (x < 0.0 || y < 0.0) {
+        if x < 0.0 || y < 0.0 {
             panic!("We could not find a place for the robo. Sorry :(")
         };
 
@@ -109,9 +108,9 @@ impl SimEnv {
             .collect();
 
         Self {
-            n_rays: nrays,
+            _n_rays: nrays,
             max_range: 12.0,
-            spread: spread,
+            _spread: spread,
             speed: 0.2,
             angvel: 0.2,
             angles: angles,
@@ -122,8 +121,8 @@ impl SimEnv {
             v: 0.0,
             nh,
             nw,
-            H: ((nh as f32) / dx),
-            W: ((nw as f32) / dx),
+            _h: ((nh as f32) / dx),
+            _w: ((nw as f32) / dx),
             dx,
             grid,
             dt: 0.02,

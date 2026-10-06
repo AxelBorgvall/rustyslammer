@@ -1,21 +1,17 @@
 use crate::robo::io::lerp_rgb;
-use crate::robo::{CHUNK_L, CHUNK_SIZE, Cell, ChunkCache, ScanPoints, to_world_beam_major};
+use crate::robo::{CHUNK_L, ChunkCache, ScanPoints, to_world_beam_major};
 use crate::robo::{
-    Chunk, LidarScan, Map, MapQuery, RobotPose, SlamImage, bresenham::Bresenham, cell_mut,
+     LidarScan, Map, RobotPose, SlamImage, bresenham::Bresenham,
     to_world, world2cell,
 };
 use arc_swap::ArcSwap;
 use log::info;
 use rand::{Rng, thread_rng};
 use rand_distr::{Distribution, Normal};
-use std::io::SeekFrom::Current;
-use std::iter::Scan;
-use std::thread::sleep;
 use std::time::Duration;
 use std::time::Instant;
 use std::usize;
 use std::{
-    collections::HashMap,
     sync::{
         Arc, RwLock,
         atomic::{AtomicBool, Ordering::Relaxed},
@@ -45,8 +41,6 @@ pub struct OGMappingCore {
     pub ang_noise: f32,
     pub vel_noise: f32,
     pub search_distance: i32, // Radius searched around a lidar hit for terrain
-    pub l_free: f32,
-    pub l_occ: f32,
 
     // Scanmatch search params
     pub xy_step: f32,
@@ -56,7 +50,7 @@ pub struct OGMappingCore {
     pub occ_thresh: f32,
     pub inv_2sigsqr: f32,
     pub z_hit: f32,
-    pub z_rand: f32,
+    pub _z_rand: f32,
     pub rand_term: f32,
     pub miss_lp: f32,
 }
@@ -242,7 +236,6 @@ impl OGMappingCore {
     }
 
     fn update_map(&self, map: &mut Map, pose: RobotPose, beams: &ScanPoints) {
-        const L: i32 = CHUNK_L as i32;
         let start = world2cell(pose.x, pose.y, self.dx);
 
         let mut chunkcache: ChunkCache<CHUNKCACHE_SIZE> = ChunkCache::new();
@@ -275,7 +268,6 @@ pub struct OGMapping {
     pub particles: Vec<RobotPose>,
     pub particle_maps: Vec<Map>,
     pub last_imu: RobotPose,
-    pub last_update: f32,
     pub screenbuffer: Vec<u32>,
 }
 
@@ -291,8 +283,6 @@ impl OGMapping {
             ang_noise: 0.05,
             vel_noise: 0.05,
             search_distance: 1,
-            l_free: 0.4,
-            l_occ: 0.9,
             xy_step: dx,
             max_steps: 60,
             theta_step: 0.05,
@@ -300,7 +290,7 @@ impl OGMapping {
             occ_thresh: 0.1,
             inv_2sigsqr: (0.05f32).powi(-2) / 2.0,
             z_hit: z_hit,
-            z_rand: z_rand,
+            _z_rand: z_rand,
             rand_term: rand_term,
             miss_lp: rand_term.ln(),
         };
@@ -310,14 +300,13 @@ impl OGMapping {
             particle_maps: vec![Map::default(); n_part],
             weights: vec![1.0; n_part],
             last_imu: RobotPose::default(),
-            last_update: 0.0,
             screenbuffer: vec![],
         }
     }
 
     pub fn update_positions(&mut self, imu_data: RobotPose, lidar_data: &LidarScan, dt: f32) {
         // Compute priors
-        let delta = (imu_data - self.last_imu);
+        let delta = imu_data - self.last_imu;
         self.last_imu = imu_data;
 
         let mut rng = thread_rng();
@@ -377,7 +366,7 @@ impl OGMapping {
         }
 
         let r: f32 = thread_rng().gen_range(0.0..1.0 / n as f32);
-        let mut counts = vec![0usize; n];
+        let counts = vec![0usize; n];
         let (mut i, mut cum_weight) = (0, self.weights[0]);
         for k in 0..n {
             let ptr = r + k as f32 / n as f32;
@@ -416,6 +405,11 @@ impl OGMapping {
             max.0 = max.0.max(key.0);
             max.1 = max.1.max(key.1);
         }
+		if min.0==i32::MAX{
+			self.screenbuffer=vec![0;4];
+
+			return (1,1);
+		}
         // Add offset to move min to origin
         let offset = (-min.0, -min.1);
         let size = ((max.0 - min.0) as usize, (max.1 - min.1) as usize);
@@ -434,7 +428,7 @@ impl OGMapping {
                         let activation = (activation * 255.0) as u32;
                         let color = activation << 16 | activation << 8 | activation;
 
-                        self.screenbuffer[i + corner.0 + (corner.1 + j) * size.0] = (color);
+                        self.screenbuffer[i + corner.0 + (corner.1 + j) * size.0] = color;
                     }
                 }
             }
@@ -481,11 +475,14 @@ impl Slam for OGMapping {
             info!("Slam is starting now!");
             let mut last_upos = Instant::now() - Duration::from_secs_f32(0.2);
             while !shutdown_flag.load(Relaxed) {
+				// Get imu and lidar
                 let imu_state = {
                     let guard = imu_in.read().unwrap();
                     *guard
                 };
                 let lidar_data = lidar_in.load_full();
+
+				// Update state
                 let now = Instant::now();
                 let dt = now.duration_since(last_upos).as_secs_f32();
                 last_upos = now;
@@ -494,8 +491,8 @@ impl Slam for OGMapping {
                 self.update_maps(&lidar_data);
                 self.resample();
 
-
-                let (best, score) = self
+				// Send map
+                let (best, _) = self
                     .weights
                     .iter()
                     .enumerate()

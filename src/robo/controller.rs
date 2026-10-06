@@ -1,7 +1,6 @@
-use crate::robo::{RobotPose, LidarScan, Map, TwoWheelControl};
+use crate::robo::{ LidarScan, Map, TwoWheelControl};
 use arc_swap::ArcSwap;
-use std::{
-    collections::HashMap, f32::consts::PI, sync::{
+use std::{ f32::consts::PI, sync::{
         Arc, RwLock,
         atomic::{AtomicBool, Ordering::Relaxed},
     }, thread::{self, JoinHandle}, time::Duration,
