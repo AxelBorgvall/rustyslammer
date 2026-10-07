@@ -5,7 +5,7 @@ use arc_swap::ArcSwap;
 // use std::net::Shutdown;
 use std::sync::atomic::Ordering::Relaxed;
 use std::thread::JoinHandle;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 use std::{
     f32::consts::PI,
     sync::{Arc, RwLock, atomic::AtomicBool},
@@ -111,8 +111,8 @@ impl SimEnv {
             _n_rays: nrays,
             max_range: 12.0,
             _spread: spread,
-            speed: 0.2,
-            angvel: 0.2,
+            speed: 1.0,
+            angvel: 0.7,
             angles: angles,
             x,
             y,
@@ -125,8 +125,8 @@ impl SimEnv {
             _w: ((nw as f32) / dx),
             dx,
             grid,
-            dt: 0.02,
-            seconds_per_iter: 0.02,
+            dt: 0.002,
+            seconds_per_iter: 0.001,
             screenbuffer: vec![0; nh * nw],
         }
     }
@@ -285,7 +285,13 @@ impl Environment for SimEnv {
             let mut count: u32 = 0;
             println!("Environment thread starting now");
 
+            let mut lastcall = Instant::now() - Duration::from_secs_f32(0.2);
             while !shutdown_flag.load(Relaxed) {
+				let now=Instant::now();
+				let dt=now.duration_since(lastcall).as_secs_f32();
+				lastcall=now;
+				println!("dt env={}, waittime={}",dt,self.seconds_per_iter);
+
                 let current_control = {
                     let guard = control_in.read().unwrap();
                     *guard

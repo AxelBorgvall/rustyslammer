@@ -330,7 +330,7 @@ impl OGMapping {
                     y: particle.y + noise_dist_x.sample(&mut rng),
                     theta: particle.theta + noise_dist_theta.sample(&mut rng),
                 } + delta;
-				(*particle,*weight)=core.scanmatch_hillclimb(prior, map, &scan_pts);
+                (*particle, *weight) = core.scanmatch_hillclimb(prior, map, &scan_pts);
             });
         let max = self
             .weights
@@ -414,42 +414,45 @@ impl OGMapping {
         }
         // Add offset to move min to origin
         let offset = (-min.0, -min.1);
-        let size = ((max.0 - min.0) as usize, (max.1 - min.1) as usize);
+        let size = ((max.0 - min.0 + 1) as usize, (max.1 - min.1 + 1) as usize);
         // Grey infill
-        self.screenbuffer
-            .resize(size.0 * size.1 * CHUNK_SIZE, 0x00808080);
-        self.screenbuffer.fill(0x00808080);
 
         // draw all the maps
+        let w = size.0 * CHUNK_L;
+        let h = size.1 * CHUNK_L;
+        let mut activation = vec![0.5f32; w * h];
+        let inv_n = 1.0f32 / self.core.n_part as f32;
         for map in self.particle_maps.iter() {
             for (key, chunk) in map.iter() {
                 let corner = (
                     ((key.0 + offset.0) * L) as usize,
                     ((key.1 + offset.1) * L) as usize,
                 );
+
                 for i in 0..CHUNK_L {
                     for j in 0..CHUNK_L {
-                        let activation = chunk[i + j * CHUNK_L].occupancy().clamp(0.0, 1.0)
-                            / self.core.n_part as f32;
-                        let activation = (activation * 255.0) as u32;
-                        let color = activation << 16 | activation << 8 | activation;
-
-                        self.screenbuffer[i + corner.0 + (corner.1 + j) * size.0] = color;
+                        let occ = chunk[i + j * CHUNK_L].occupancy();
+                        activation[(corner.0 + i) + (corner.1 + j) * w] += (occ * 0.5) * inv_n;
                     }
                 }
             }
+        }
+        self.screenbuffer.resize(w * h, 0);
+        for (dst, a) in self.screenbuffer.iter_mut().zip(&activation) {
+            let v = (a.clamp(0.0, 1.0) * 255.0) as u32;
+            *dst = v << 16 | v << 8 | v;
         }
         // Here come the robots
         for pose in self.particles.iter() {
             let (s, c) = pose.theta.sin_cos();
             let line: Vec<(i32, i32)> = Bresenham::new(
                 (
-                    (pose.x / self.core.dx - c * 1.5) as i32,
-                    (pose.y / self.core.dx - s * 1.5) as i32,
+                    (pose.x / self.core.dx - c * 1.5).floor() as i32,
+                    (pose.y / self.core.dx - s * 1.5).floor() as i32,
                 ),
                 (
-                    (pose.x / self.core.dx + c * 1.5) as i32,
-                    (pose.y / self.core.dx + s * 1.5) as i32,
+                    (pose.x / self.core.dx + c * 1.5).floor() as i32,
+                    (pose.y / self.core.dx + s * 1.5).floor() as i32,
                 ),
             )
             .collect();
@@ -461,10 +464,13 @@ impl OGMapping {
                 let color = lerp_rgb(0x000000FF, 0x00FF0000, t);
                 let pos: (usize, usize) =
                     ((x + offset.0 * L) as usize, (y + offset.1 * L) as usize);
-                self.screenbuffer[pos.0 + pos.1 * size.0] = color;
+                if pos.0 as usize >= w || pos.1 as usize >= h {
+                    continue;
+                }
+                self.screenbuffer[pos.0 + pos.1 * size.0 * CHUNK_L] = color;
             }
         }
-        size
+        (w,h)
     }
 }
 
@@ -493,7 +499,7 @@ impl Slam for OGMapping {
                 let now = Instant::now();
                 let dt = now.duration_since(last_upos).as_secs_f32();
                 last_upos = now;
-                println!("dt={dt}");
+                println!("dt slam={dt}");
                 self.update_positions(imu_state, &lidar_data, dt);
                 self.update_maps(&lidar_data);
                 self.resample();
