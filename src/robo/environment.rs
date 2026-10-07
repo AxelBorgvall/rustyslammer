@@ -1,5 +1,9 @@
 use crate::robo::{EnvImage, LidarScan, RobotPose, TwoWheelControl, bresenham::Bresenham, io};
 use crate::robo::{ScanPoints, to_world, world2cell};
+use rand::rngs::ThreadRng;
+use rand::{Rng, thread_rng};
+use rand_distr::{Distribution, Normal};
+
 use arc_swap::ArcSwap;
 // use minifb::Key::Y;
 // use std::net::Shutdown;
@@ -25,12 +29,8 @@ pub trait Environment: Send {
 
 pub struct SimEnv {
     // Robot
-    pub _n_rays: i32,
-    pub max_range: f32,
-    pub _spread: f32,
     pub speed: f32,
     pub angvel: f32,
-    pub angles: Vec<f32>,
 
     // Pose
     pub x: f32,
@@ -39,11 +39,20 @@ pub struct SimEnv {
     pub v: f32,
     pub om: f32,
 
+    // Lidar
+    pub angles: Vec<f32>,
+    pub max_range: f32,
+    pub n_rays: i32,
+    pub spread: f32,
+    pub const_nosie: f32,
+    pub noise_factor: f32,
+    pub ang_noise: f32,
+
     // Map
     pub nh: usize,
     pub nw: usize,
-    pub _h: f32,
-    pub _w: f32,
+    pub h: f32,
+    pub w: f32,
     pub dx: f32,
     pub grid: Vec<bool>,
 
@@ -108,25 +117,39 @@ impl SimEnv {
             .collect();
 
         Self {
-            _n_rays: nrays,
-            max_range: 12.0,
-            _spread: spread,
+            // Robot
             speed: 1.0,
-            angvel: 0.7,
-            angles: angles,
-            x,
-            y,
+            angvel: 1.4,
+
+            // Pose
+            x: x,
+            y: y,
             theta: theta,
-            om: 0.0,
             v: 0.0,
-            nh,
-            nw,
-            _h: ((nh as f32) / dx),
-            _w: ((nw as f32) / dx),
-            dx,
-            grid,
-            dt: 0.002,
-            seconds_per_iter: 0.001,
+            om: 0.0,
+
+            // Lidar
+            angles: angles,
+            max_range: 12.0,
+            n_rays: nrays,
+            spread: spread,
+            const_nosie: 0.01,
+            noise_factor: 0.005,
+            ang_noise: 0.002,
+
+            // Map
+            nh: nh,
+            nw: nw,
+            h: ((nh as f32) / dx),
+            w: ((nw as f32) / dx),
+            dx: dx,
+            grid: grid,
+
+            // Speed
+            dt: 0.02,
+            seconds_per_iter: 0.02,
+
+            // buffers
             screenbuffer: vec![0; nh * nw],
         }
     }
@@ -141,7 +164,7 @@ impl SimEnv {
     fn cast_ray(&self, rx: f32, ry: f32, ray_angle: f32) -> f32 {
         let start_x = (rx / self.dx) as i32;
         let start_y = (ry / self.dx) as i32;
-        let end_x = ((rx + self.max_range * ray_angle.cos()) / self.dx) as i32;
+        let end_x = ((rx + self.max_range * (ray_angle).cos()) / self.dx) as i32;
         let end_y = ((ry + self.max_range * ray_angle.sin()) / self.dx) as i32;
 
         for (x, y) in Bresenham::new((start_x, start_y), (end_x, end_y)) {
@@ -160,10 +183,19 @@ impl SimEnv {
         self.max_range
     }
     pub fn lidarscan(&self) -> LidarScan {
+        let mut rng = thread_rng();
+        let ang_noise = Normal::new(0.0, self.ang_noise).unwrap();
+        let norm = Normal::new(0.0, 1.0).unwrap();
+
         let ranges: Vec<f32> = self
             .angles
             .iter()
-            .map(|&angle| self.cast_ray(self.x, self.y, self.theta + angle))
+            .map(|angle| {
+                let angle = angle + ang_noise.sample(&mut rng);
+                let dist = self.cast_ray(self.x, self.y, self.theta + angle);
+                let noise_scale = (self.const_nosie + dist * self.noise_factor);
+                dist + norm.sample(&mut rng) * noise_scale
+            })
             .collect();
 
         LidarScan {
@@ -175,8 +207,8 @@ impl SimEnv {
 
     // Kinematics
     pub fn step_fwd(&mut self, input: TwoWheelControl) {
-        self.v += 2.0 * (input.v_r.clamp(-self.speed, self.speed) - self.v) * self.dt;
-        self.om += 2.0 * (input.om_r.clamp(-self.angvel, self.angvel) - self.om) * self.dt;
+        self.v += 4.0 * (input.v_r.clamp(-self.speed, self.speed) - self.v) * self.dt;
+        self.om += 4.0 * (input.om_r.clamp(-self.angvel, self.angvel) - self.om) * self.dt;
 
         let x_prime = self.x + self.v * self.theta.cos() * self.dt;
         let y_prime = self.y + self.v * self.theta.sin() * self.dt;
@@ -209,8 +241,8 @@ impl SimEnv {
     }
     fn drawline(&mut self, line: Bresenham, color: u32) {
         for (x, y) in line {
-            let x = x as usize;
-            let y = y as usize;
+            let x = (x as usize).clamp(0,self.nw-1);
+            let y = (y as usize).clamp(0,self.nh-1);
             self.screenbuffer[x + y * self.nw] = color;
         }
     }
@@ -285,13 +317,10 @@ impl Environment for SimEnv {
             let mut count: u32 = 0;
             println!("Environment thread starting now");
 
-            let mut lastcall = Instant::now() - Duration::from_secs_f32(0.2);
-            while !shutdown_flag.load(Relaxed) {
-				let now=Instant::now();
-				let dt=now.duration_since(lastcall).as_secs_f32();
-				lastcall=now;
-				println!("dt env={}, waittime={}",dt,self.seconds_per_iter);
+            let mut lastcall = Instant::now();
+            let mut lastdraw = Instant::now();
 
+            while !shutdown_flag.load(Relaxed) {
                 let current_control = {
                     let guard = control_in.read().unwrap();
                     *guard
@@ -313,28 +342,38 @@ impl Environment for SimEnv {
                     };
                 }
 
-                // Publish environment render
-                self.render(Some(&scan));
-                if let Some(mailbox) = &img_out {
-                    let current_buffer = std::mem::take(&mut self.screenbuffer);
-                    let new_frame = Arc::new(EnvImage {
-                        data: current_buffer,
-                        width: self.nw,
-                        height: self.nh,
-                    });
+                let now = Instant::now();
+                let dt = lastcall - now;
+                lastcall = now;
+                if dt.as_secs_f32() < self.seconds_per_iter {
+                    thread::sleep(Duration::from_secs_f32(self.seconds_per_iter) - dt);
+                }
 
-                    let old_frame_arc = mailbox.swap(new_frame);
-                    match Arc::try_unwrap(old_frame_arc) {
-                        Ok(old_frame) => {
-                            self.screenbuffer = old_frame.data;
-                        }
-                        Err(_) => {
-                            self.screenbuffer = vec![0; self.nw * self.nh];
+                // Publish environment render
+                let now = Instant::now();
+                let dt_draw = now - lastdraw;
+                if dt_draw > Duration::from_millis(80) {
+                    lastdraw = now;
+                    self.render(Some(&scan));
+                    if let Some(mailbox) = &img_out {
+                        let current_buffer = std::mem::take(&mut self.screenbuffer);
+                        let new_frame = Arc::new(EnvImage {
+                            data: current_buffer,
+                            width: self.nw,
+                            height: self.nh,
+                        });
+
+                        let old_frame_arc = mailbox.swap(new_frame);
+                        match Arc::try_unwrap(old_frame_arc) {
+                            Ok(old_frame) => {
+                                self.screenbuffer = old_frame.data;
+                            }
+                            Err(_) => {
+                                self.screenbuffer = vec![0; self.nw * self.nh];
+                            }
                         }
                     }
                 }
-
-                thread::sleep(Duration::from_secs_f32(self.seconds_per_iter));
             }
         })
     }

@@ -26,9 +26,9 @@ pub struct BasicController {
 impl Default for BasicController {
     fn default() -> Self {
         Self {
-            speed: 0.2,
-            angvel: 0.2,
-            reactrange: 2.0,
+            speed: 1.0,
+            angvel: 1.2,
+            reactrange: 4.0,
             k: 1.0,
         }
     }
@@ -39,7 +39,7 @@ impl BasicController {
         let mut fx = 0.0f32;
         let mut fy = 0.0f32;
 
-        let max_dist = scan.max_distance - 0.1;
+        let max_dist = (scan.max_distance - 0.1).min(self.reactrange);
 
 		let mut nhits=0;
         for (&angle, &range) in scan.angles.iter().zip(scan.ranges.iter()) {
