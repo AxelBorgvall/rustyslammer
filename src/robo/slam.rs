@@ -1,12 +1,12 @@
 use crate::robo::io::lerp_rgb;
 use crate::robo::{CHUNK_L, CHUNK_SIZE, ChunkCache, ScanPoints, to_world_beam_major};
 use crate::robo::{
-     LidarScan, Map, RobotPose, SlamImage, bresenham::Bresenham,
-    to_world, world2cell,
+    LidarScan, Map, RobotPose, SlamImage, bresenham::Bresenham, to_world, world2cell,
 };
 use arc_swap::ArcSwap;
 use rand::{Rng, thread_rng};
 use rand_distr::{Distribution, Normal};
+use rayon::iter::{IndexedParallelIterator, IntoParallelRefMutIterator, ParallelIterator};
 use std::time::Duration;
 use std::time::Instant;
 use std::usize;
@@ -317,20 +317,21 @@ impl OGMapping {
             Normal::new(0.0, (delta.theta / dt * self.core.ang_noise).abs() + 0.01).unwrap();
 
         let scan_pts = ScanPoints::from_scan(lidar_data, lidar_data.max_distance * 0.98);
+        let core = &self.core;
 
-        for ((particle, map), weight) in self
-            .particles
-            .iter_mut()
-            .zip(self.particle_maps.iter_mut())
-            .zip(self.weights.iter_mut())
-        {
-            let prior = RobotPose {
-                x: particle.x + noise_dist_x.sample(&mut rng),
-                y: particle.y + noise_dost_y.sample(&mut rng),
-                theta: particle.theta + noise_dist_theta.sample(&mut rng),
-            } + delta;
-            (*particle, *weight) = self.core.scanmatch_hillclimb(prior, map, &scan_pts)
-        }
+        self.particles
+            .par_iter_mut()
+            .zip(self.particle_maps.par_iter_mut())
+            .zip(self.weights.par_iter_mut())
+            .for_each(|((particle, map), weight)| {
+                let mut rng = rand::thread_rng();
+                let prior = RobotPose {
+                    x: particle.x + noise_dist_x.sample(&mut rng),
+                    y: particle.y + noise_dist_x.sample(&mut rng),
+                    theta: particle.theta + noise_dist_theta.sample(&mut rng),
+                } + delta;
+				(*particle,*weight)=core.scanmatch_hillclimb(prior, map, &scan_pts);
+            });
         let max = self
             .weights
             .iter()
@@ -341,15 +342,14 @@ impl OGMapping {
             *w = ((*w - max) / self.core.resampling_temp).exp();
             sum += *w;
         }
-		let mean=sum/self.core.n_part as f32;
-		let mut var=0.0f32;
+        let mean = sum / self.core.n_part as f32;
+        let mut var = 0.0f32;
         for w in self.weights.iter_mut() {
-			var+=(*w-mean).powi(2);
+            var += (*w - mean).powi(2);
             *w /= sum;
         }
-		var/=self.core.n_part as f32;
-		self.core.resampling_temp=0.8*self.core.resampling_temp+0.20*var.sqrt().max(1.0);
-
+        var /= self.core.n_part as f32;
+        self.core.resampling_temp = 0.8 * self.core.resampling_temp + 0.20 * var.sqrt().max(1.0);
     }
     pub fn update_maps(&mut self, lidar_scan: &LidarScan) {
         let scan_pts = ScanPoints::from_scan(&lidar_scan, lidar_scan.max_distance * 0.98);
@@ -373,7 +373,7 @@ impl OGMapping {
                 i += 1;
                 cum_weight += self.weights[i];
             }
-			counts[i]+=1;
+            counts[i] += 1;
         }
 
         let old_poses = self.particles.clone();
@@ -381,7 +381,7 @@ impl OGMapping {
         let mut poses = Vec::with_capacity(n);
         let mut maps = Vec::with_capacity(n);
 
-        for (i,(map, pose)) in old_maps.into_iter().zip(old_poses.into_iter()).enumerate() {
+        for (i, (map, pose)) in old_maps.into_iter().zip(old_poses.into_iter()).enumerate() {
             let c = counts[i];
             for _ in 1..c {
                 maps.push(map.clone());
@@ -394,10 +394,10 @@ impl OGMapping {
         }
         self.particles = poses;
         self.particle_maps = maps;
-		self.weights.fill(1.0 / n as f32);
+        self.weights.fill(1.0 / n as f32);
     }
     pub fn render(&mut self) -> (usize, usize) {
-		const L:i32=CHUNK_L as i32;
+        const L: i32 = CHUNK_L as i32;
         let keys = self.particle_maps.iter().flat_map(|map| map.keys());
         let mut min: (i32, i32) = (i32::MAX, i32::MAX);
         let mut max: (i32, i32) = (i32::MIN, i32::MIN);
@@ -407,22 +407,26 @@ impl OGMapping {
             max.0 = max.0.max(key.0);
             max.1 = max.1.max(key.1);
         }
-		if min.0==i32::MAX{
-			self.screenbuffer=vec![0;4];
+        if min.0 == i32::MAX {
+            self.screenbuffer = vec![0; 4];
 
-			return (1,1);
-		}
+            return (1, 1);
+        }
         // Add offset to move min to origin
         let offset = (-min.0, -min.1);
         let size = ((max.0 - min.0) as usize, (max.1 - min.1) as usize);
         // Grey infill
-        self.screenbuffer.resize(size.0 * size.1*CHUNK_SIZE, 0x00808080);
+        self.screenbuffer
+            .resize(size.0 * size.1 * CHUNK_SIZE, 0x00808080);
         self.screenbuffer.fill(0x00808080);
 
         // draw all the maps
         for map in self.particle_maps.iter() {
             for (key, chunk) in map.iter() {
-                let corner = (((key.0 + offset.0)*L) as usize, ((key.1 + offset.1)*L) as usize);
+                let corner = (
+                    ((key.0 + offset.0) * L) as usize,
+                    ((key.1 + offset.1) * L) as usize,
+                );
                 for i in 0..CHUNK_L {
                     for j in 0..CHUNK_L {
                         let activation = chunk[i + j * CHUNK_L].occupancy().clamp(0.0, 1.0)
@@ -455,7 +459,8 @@ impl OGMapping {
 
                 // ass -> nose
                 let color = lerp_rgb(0x000000FF, 0x00FF0000, t);
-                let pos: (usize, usize) = ((x + offset.0*L) as usize, (y + offset.1*L) as usize);
+                let pos: (usize, usize) =
+                    ((x + offset.0 * L) as usize, (y + offset.1 * L) as usize);
                 self.screenbuffer[pos.0 + pos.1 * size.0] = color;
             }
         }
@@ -477,30 +482,30 @@ impl Slam for OGMapping {
             println!("Slam is starting now!");
             let mut last_upos = Instant::now() - Duration::from_secs_f32(0.2);
             while !shutdown_flag.load(Relaxed) {
-				// Get imu and lidar
+                // Get imu and lidar
                 let imu_state = {
                     let guard = imu_in.read().unwrap();
                     *guard
                 };
                 let lidar_data = lidar_in.load_full();
 
-				// Update state
+                // Update state
                 let now = Instant::now();
                 let dt = now.duration_since(last_upos).as_secs_f32();
                 last_upos = now;
-				println!("dt={dt}");
+                println!("dt={dt}");
                 self.update_positions(imu_state, &lidar_data, dt);
                 self.update_maps(&lidar_data);
                 self.resample();
 
-				// Send map
+                // Send map
                 let (best, _) = self
                     .weights
                     .iter()
                     .enumerate()
                     .max_by(|(_, a), (_, b)| a.total_cmp(b))
                     .unwrap_or((0, &0.0));
-				map_out.store(Arc::new(self.particle_maps[best].clone()));
+                map_out.store(Arc::new(self.particle_maps[best].clone()));
 
                 // Send render
                 if let Some(mailbox) = &img_out {
@@ -522,10 +527,10 @@ impl Slam for OGMapping {
                         }
                     }
                 }
-				if dt<0.005{
-					println!("sleepytime");
-					thread::sleep(Duration::from_millis(100));
-				}
+                if dt < 0.005 {
+                    println!("sleepytime");
+                    thread::sleep(Duration::from_millis(100));
+                }
             }
         })
     }

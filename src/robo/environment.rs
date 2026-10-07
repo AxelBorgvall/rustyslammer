@@ -1,4 +1,5 @@
-use crate::robo::{EnvImage, RobotPose, LidarScan, TwoWheelControl, bresenham::Bresenham, io};
+use crate::robo::{EnvImage, LidarScan, RobotPose, TwoWheelControl, bresenham::Bresenham, io};
+use crate::robo::{ScanPoints, to_world, world2cell};
 use arc_swap::ArcSwap;
 // use minifb::Key::Y;
 // use std::net::Shutdown;
@@ -59,7 +60,7 @@ fn checkaround(grid: &Vec<bool>, nh: usize, nw: usize, x: usize, y: usize, rad: 
     if (x + rad + 1 > nw) || (y + rad + 1 > nh) {
         return true;
     }
-    if x < rad || y < rad{
+    if x < rad || y < rad {
         return true;
     }
     for i in x - rad..x + rad {
@@ -206,10 +207,46 @@ impl SimEnv {
         }
         self.theta += self.om * self.dt;
     }
-    pub fn render(&mut self) {
+    fn drawline(&mut self, line: Bresenham, color: u32) {
+        for (x, y) in line {
+            let x = x as usize;
+            let y = y as usize;
+            self.screenbuffer[x + y * self.nw] = color;
+        }
+    }
+    pub fn render(&mut self, lidar_data: Option<&LidarScan>) {
         self.screenbuffer.resize(self.nw * self.nh, 0);
         for (pixel, &is_wall) in self.screenbuffer.iter_mut().zip(self.grid.iter()) {
             *pixel = if is_wall { 0x00000000 } else { 0xFFFFFFFF };
+        }
+
+        if let (Some(scan)) = lidar_data {
+            let start = (self.real2idx(self.x), self.real2idx(self.y));
+            let scan_pts = ScanPoints::from_scan(scan, scan.max_distance);
+            for ray in to_world(
+                &scan_pts.hits,
+                RobotPose {
+                    x: self.x,
+                    y: self.y,
+                    theta: self.theta,
+                },
+            ) {
+                let end = (self.real2idx(ray[0]), self.real2idx(ray[1]));
+                let line = Bresenham::new(start, end);
+                self.drawline(line, 0x00D0D0FF);
+            }
+            for ray in to_world(
+                &scan_pts.free_only,
+                RobotPose {
+                    x: self.x,
+                    y: self.y,
+                    theta: self.theta,
+                },
+            ) {
+                let end = (self.real2idx(ray[0]), self.real2idx(ray[1]));
+                let line = Bresenham::new(start, end);
+                self.drawline(line, 0x00D0D0FF);
+            }
         }
 
         let cx = self.real2idx(self.x) as usize;
@@ -230,11 +267,7 @@ impl SimEnv {
             (x_offset, y_offset),
         );
 
-        for (x, y) in nose {
-            let x = x as usize;
-            let y = y as usize;
-            self.screenbuffer[x + y * self.nw] = 0x000000FF;
-        }
+        self.drawline(nose, 0x00FF000000);
     }
 }
 
@@ -262,7 +295,7 @@ impl Environment for SimEnv {
                 count += 1;
                 // Publish lidardata
                 let scan = self.lidarscan();
-                lidar_out.store(Arc::new(scan));
+                lidar_out.store(Arc::new(scan.clone()));
 
                 // Publish IMUData
                 {
@@ -275,7 +308,7 @@ impl Environment for SimEnv {
                 }
 
                 // Publish environment render
-                self.render();
+                self.render(Some(&scan));
                 if let Some(mailbox) = &img_out {
                     let current_buffer = std::mem::take(&mut self.screenbuffer);
                     let new_frame = Arc::new(EnvImage {
