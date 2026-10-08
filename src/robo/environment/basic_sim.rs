@@ -1,3 +1,4 @@
+use crate::robo::environment::Environment;
 use crate::robo::{EnvImage, LidarScan, RobotPose, TwoWheelControl, bresenham::Bresenham, io};
 use crate::robo::{ScanPoints, to_world, world2cell};
 use rand::rngs::ThreadRng;
@@ -16,18 +17,7 @@ use std::{
     thread,
 };
 
-pub trait Environment: Send {
-    fn spawn(
-        self,
-        shutdown_flag: Arc<AtomicBool>,
-        lidar_out: Arc<ArcSwap<LidarScan>>,
-        imu_out: Arc<RwLock<RobotPose>>,
-        control_in: Arc<RwLock<TwoWheelControl>>,
-        img_out: Option<Arc<ArcSwap<EnvImage>>>,
-    ) -> JoinHandle<()>;
-}
-
-pub struct SimEnv {
+pub struct BasicSimEnv {
     // Robot
     pub speed: f32,
     pub angvel: f32,
@@ -82,7 +72,7 @@ fn checkaround(grid: &Vec<bool>, nh: usize, nw: usize, x: usize, y: usize, rad: 
     false
 }
 
-impl SimEnv {
+impl BasicSimEnv {
     pub fn new(path: &str) -> Self {
         let (nh, nw, dx, grid) =
             io::load_data(path).expect("Failed to load the Map from the path specified.");
@@ -303,7 +293,7 @@ impl SimEnv {
     }
 }
 
-impl Environment for SimEnv {
+impl Environment for BasicSimEnv {
     fn spawn(
         mut self,
         shutdown_flag: Arc<AtomicBool>,
