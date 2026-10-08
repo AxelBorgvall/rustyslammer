@@ -123,7 +123,6 @@ where
             WindowOptions::default(),
         )
         .expect("Failed to create window");
-        // window.limit_update_rate(Some(Duration::from_micros(50_000)));
         window.set_target_fps(20);
         let mut combined_buffer = vec![0u32; WINDOW_WIDTH * WINDOW_HEIGHT];
 
