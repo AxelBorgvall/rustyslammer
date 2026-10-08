@@ -9,7 +9,7 @@ use arc_swap::ArcSwap;
 use minifb::{Key, Window, WindowOptions};
 
 use crate::robo::{
-    EnvImage, RobotPose, LidarScan, Map, SlamImage, TwoWheelControl, controller::Controller,
+    EnvImage, RobotPose, LidarScan, Map, SlamImage, TwoDOFControl, controller::Controller,
     environment::Environment, slam::Slam,
 };
 
@@ -87,8 +87,8 @@ where
         let lidarscan_mailbox: Arc<ArcSwap<LidarScan>> =
             Arc::new(ArcSwap::new(Arc::new(LidarScan::default())));
         let map_mailbox: Arc<ArcSwap<Map>> = Arc::new(ArcSwap::new(Arc::new(Map::default())));
-        let control_mailbox: Arc<RwLock<TwoWheelControl>> =
-            Arc::new(RwLock::new(TwoWheelControl::default()));
+        let control_mailbox: Arc<RwLock<TwoDOFControl>> =
+            Arc::new(RwLock::new(TwoDOFControl::default()));
 
         let env_render_mailbox = Arc::new(ArcSwap::new(Arc::new(EnvImage::default())));
         let slam_render_mailbox = Arc::new(ArcSwap::new(Arc::new(SlamImage::default())));

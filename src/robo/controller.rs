@@ -1,4 +1,4 @@
-use crate::robo::{ LidarScan, Map, TwoWheelControl};
+use crate::robo::{ LidarScan, Map, TwoDOFControl};
 use arc_swap::ArcSwap;
 use std::{ f32::consts::PI, sync::{
         Arc, RwLock,
@@ -12,7 +12,7 @@ pub trait Controller: Send {
         shutdown_flag: Arc<AtomicBool>,
         lidar_in: Arc<ArcSwap<LidarScan>>,
         map_in: Arc<ArcSwap<Map>>,
-        ctrl_out: Arc<RwLock<TwoWheelControl>>,
+        ctrl_out: Arc<RwLock<TwoDOFControl>>,
     ) -> JoinHandle<()>;
 }
 
@@ -35,7 +35,7 @@ impl Default for BasicController {
 }
 
 impl BasicController {
-    fn control(&self, scan: &LidarScan) -> TwoWheelControl {
+    fn control(&self, scan: &LidarScan) -> TwoDOFControl {
         let mut fx = 0.0f32;
         let mut fy = 0.0f32;
 
@@ -64,9 +64,9 @@ impl BasicController {
         let omega = heading_r.clamp(-self.angvel, self.angvel);
         let v = fx.clamp(-self.speed, self.speed);
 
-        TwoWheelControl {
-            v_r: v,
-            om_r: omega,
+        TwoDOFControl {
+            trans_r: v,
+            rot_r: omega,
         }
     }
 }
@@ -77,7 +77,7 @@ impl Controller for BasicController {
         shutdown_flag: Arc<AtomicBool>,
         lidar_in: Arc<ArcSwap<LidarScan>>,
         map_in: Arc<ArcSwap<Map>>,
-        ctrl_out: Arc<RwLock<TwoWheelControl>>,
+        ctrl_out: Arc<RwLock<TwoDOFControl>>,
     ) -> JoinHandle<()> {
         thread::spawn(move || {
             while !shutdown_flag.load(Relaxed) {

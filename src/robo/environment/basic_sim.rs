@@ -1,5 +1,5 @@
 use crate::robo::environment::Environment;
-use crate::robo::{EnvImage, LidarScan, RobotPose, TwoWheelControl, bresenham::Bresenham, io};
+use crate::robo::{EnvImage, LidarScan, RobotPose, TwoDOFControl, bresenham::Bresenham, io};
 use crate::robo::{ScanPoints, to_world, world2cell};
 use rand::rngs::ThreadRng;
 use rand::{Rng, thread_rng};
@@ -196,9 +196,9 @@ impl BasicSimEnv {
     }
 
     // Kinematics
-    pub fn step_fwd(&mut self, input: TwoWheelControl) {
-        self.v += 4.0 * (input.v_r.clamp(-self.speed, self.speed) - self.v) * self.dt;
-        self.om += 4.0 * (input.om_r.clamp(-self.angvel, self.angvel) - self.om) * self.dt;
+    pub fn step_fwd(&mut self, input: TwoDOFControl) {
+        self.v += 4.0 * (input.trans_r.clamp(-self.speed, self.speed) - self.v) * self.dt;
+        self.om += 4.0 * (input.rot_r.clamp(-self.angvel, self.angvel) - self.om) * self.dt;
 
         let x_prime = self.x + self.v * self.theta.cos() * self.dt;
         let y_prime = self.y + self.v * self.theta.sin() * self.dt;
@@ -231,8 +231,8 @@ impl BasicSimEnv {
     }
     fn drawline(&mut self, line: Bresenham, color: u32) {
         for (x, y) in line {
-            let x = (x as usize).clamp(0,self.nw-1);
-            let y = (y as usize).clamp(0,self.nh-1);
+            let x = (x as usize).clamp(0, self.nw - 1);
+            let y = (y as usize).clamp(0, self.nh - 1);
             self.screenbuffer[x + y * self.nw] = color;
         }
     }
@@ -299,12 +299,11 @@ impl Environment for BasicSimEnv {
         shutdown_flag: Arc<AtomicBool>,
         lidar_out: Arc<ArcSwap<LidarScan>>,
         imu_out: Arc<RwLock<RobotPose>>,
-        control_in: Arc<RwLock<TwoWheelControl>>,
+        control_in: Arc<RwLock<TwoDOFControl>>,
         img_out: Option<Arc<ArcSwap<EnvImage>>>,
     ) -> JoinHandle<()> {
         thread::spawn(move || {
             // Main simulation loop
-            let mut count: u32 = 0;
             println!("Environment thread starting now");
 
             let mut lastcall = Instant::now();
@@ -317,7 +316,6 @@ impl Environment for BasicSimEnv {
                 };
                 self.step_fwd(current_control);
 
-                count += 1;
                 // Publish lidardata
                 let scan = self.lidarscan();
                 lidar_out.store(Arc::new(scan.clone()));

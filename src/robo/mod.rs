@@ -320,18 +320,67 @@ impl RobotPose {
         }
     }
 }
+#[derive(Clone, Copy)] // I literally just want numerical syntax
+pub struct Pos{
+	x:f32,
+	y:f32,
+}
+impl Add for Pos {
+    type Output = Self;
+    fn add(self, other: Self) -> Self::Output {
+        Self {
+            x: self.x + other.x,
+            y: self.y + other.y,
+        }
+    }
+}
+
+impl Sub for Pos {
+    type Output = Self;
+    fn sub(self, other: Self) -> Self::Output {
+        Self {
+            x: self.x - other.x,
+            y: self.y - other.y,
+        }
+    }
+}
+impl Mul for Pos {
+    type Output = Self;
+    fn mul(self, rhs: Self) -> Self::Output {
+        Self {
+            x: self.x * rhs.x,
+            y: self.y * rhs.y,
+        }
+    }
+}
+impl Mul<f32> for Pos {
+    type Output = Self;
+
+    fn mul(self, rhs: f32) -> Self::Output {
+        Self {
+            x: self.x * rhs,
+            y: self.y * rhs,
+        }
+    }
+}
+
+impl Pos{
+	fn astup(self)->(f32,f32){
+		(self.x,self.y)
+	}
+}
 
 /* --------------------------- define Controlinput -------------------------- */
 #[derive(Clone, Copy, Debug)]
-pub struct TwoWheelControl {
-    v_r: f32,
-    om_r: f32,
+pub struct TwoDOFControl {
+    trans_r: f32,
+    rot_r: f32,
 }
-impl Default for TwoWheelControl {
+impl Default for TwoDOFControl {
     fn default() -> Self {
         Self {
-            v_r: 0.0,
-            om_r: 0.0,
+            trans_r: 0.0,
+            rot_r: 0.0,
         }
     }
 }

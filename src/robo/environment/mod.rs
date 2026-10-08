@@ -7,7 +7,7 @@ use arc_swap::ArcSwap;
 pub use basic_sim::*;
 pub use sim_car::*;
 
-use crate::robo::{EnvImage, LidarScan, RobotPose, TwoWheelControl};
+use crate::robo::{EnvImage, LidarScan, RobotPose, TwoDOFControl};
 
 pub trait Environment: Send {
     fn spawn(
@@ -15,7 +15,7 @@ pub trait Environment: Send {
         shutdown_flag: Arc<AtomicBool>,
         lidar_out: Arc<ArcSwap<LidarScan>>,
         imu_out: Arc<RwLock<RobotPose>>,
-        control_in: Arc<RwLock<TwoWheelControl>>,
+        control_in: Arc<RwLock<TwoDOFControl>>,
         img_out: Option<Arc<ArcSwap<EnvImage>>>,
     ) -> JoinHandle<()>;
 }
