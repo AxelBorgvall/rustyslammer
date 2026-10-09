@@ -10,7 +10,7 @@ use std::{
 };
 
 use arc_swap::ArcSwap;
-use rand::thread_rng;
+use rand;
 use rand_distr::{Distribution, Normal};
 
 use crate::robo::{
@@ -234,7 +234,7 @@ impl CarEnv {
         self.max_range
     }
     pub fn lidarscan(&self) -> LidarScan {
-        let mut rng = thread_rng();
+        let mut rng = rand::rng();
         let ang_noise = Normal::new(0.0, self.ang_noise).unwrap();
         let norm = Normal::new(0.0, 1.0).unwrap();
 
@@ -256,8 +256,38 @@ impl CarEnv {
         }
     }
     pub fn step_fwd(&mut self, input: TwoDOFControl) {
-
-	}
+        let wh_cos = self.whang.cos(); // max speed is whang dependent
+        self.v += 2.0
+            * (input
+                .trans_r
+                .clamp(-self.max_speed * wh_cos, self.max_speed * wh_cos)
+                - self.v)
+            * self.dt;
+        self.whang +=
+            6.0 * (input.rot_r.clamp(-self.max_whang, self.max_whang) - self.max_whang) * self.dt;
+        let (s, c) = self.pose.theta.sin_cos();
+        let new_pose = RobotPose {
+            x: self.pose.x + self.v * c,
+            y: self.pose.y + self.v * s,
+            theta: self.pose.theta + (self.v / self.wh_l) * self.whang.tan() * self.dt,
+        };
+		if !self.collision(new_pose){
+			self.pose=new_pose;
+		} else {
+			self.v=0.0;
+			// binsearch
+			let mut ratio=0.5f32;
+			for i in 0..5{
+				let prop_pose= (new_pose*ratio+self.pose*(1.0-ratio));
+				if !self.collision(prop_pose){
+					self.pose=prop_pose;
+					break;
+				} else {
+					ratio*=0.5;
+				}
+			}
+		}
+    }
 
     fn drawline(&mut self, line: Bresenham, color: u32) {
         for (x, y) in line {
@@ -314,7 +344,7 @@ impl CarEnv {
             }
         }
 
-		// Draw car body
+        // Draw car body
         let corns: [(i32, i32); 4] = self
             .corners(self.pose)
             .map(|pos| self.reals2idx((pos.x, pos.y)));
@@ -326,11 +356,11 @@ impl CarEnv {
         ];
         self.draw_box(edges, 0x00FF8000);
 
-		// Draw wheels
-		let wheel_len=2.5f32;
+        // Draw wheels
+        let wheel_len = 2.5f32;
         let (s, c) = self.pose.theta.sin_cos();
 
-		let l_offset=wheel_len*0.5;
+        let l_offset = wheel_len * 0.5;
         let corner = Pos {
             x: self.pose.x - l_offset * c - self.wh_w * 0.5 * s,
             y: self.pose.y - l_offset * s + self.wh_w * 0.5 * c,
@@ -338,24 +368,22 @@ impl CarEnv {
         let delta_1 = Pos { x: s, y: -c } * self.wh_w;
         let delta_2 = Pos { x: c, y: s } * self.wh_l;
 
-        let wheels=[
+        let wheels = [
             RobotPose::from_pos(corner, self.pose.theta),
-            RobotPose::from_pos(corner+delta_1, self.pose.theta),
-            RobotPose::from_pos(corner+delta_1+delta_2, self.pose.theta),
-            RobotPose::from_pos(corner+delta_2, self.pose.theta),
-        ].map(
-			|pose| {
-				let (s,c)=pose.theta.sin_cos();
-				Bresenham::new(self.reals2idx((pose.x,pose.y)),
-				self.reals2idx((pose.x+c*wheel_len,pose.y+s*wheel_len))
-			)
-			}
-		);
-		for line in wheels{
-			self.drawline(line, 0x00000000);
-		}
-
-
+            RobotPose::from_pos(corner + delta_1, self.pose.theta),
+            RobotPose::from_pos(corner + delta_1 + delta_2, self.pose.theta),
+            RobotPose::from_pos(corner + delta_2, self.pose.theta),
+        ]
+        .map(|pose| {
+            let (s, c) = pose.theta.sin_cos();
+            Bresenham::new(
+                self.reals2idx((pose.x, pose.y)),
+                self.reals2idx((pose.x + c * wheel_len, pose.y + s * wheel_len)),
+            )
+        });
+        for line in wheels {
+            self.drawline(line, 0x00000000);
+        }
     }
 }
 

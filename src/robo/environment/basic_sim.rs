@@ -1,8 +1,8 @@
 use crate::robo::environment::Environment;
 use crate::robo::{EnvImage, LidarScan, RobotPose, TwoDOFControl, bresenham::Bresenham, io};
 use crate::robo::{ScanPoints, to_world, world2cell};
+use rand::Rng;
 use rand::rngs::ThreadRng;
-use rand::{Rng, thread_rng};
 use rand_distr::{Distribution, Normal};
 
 use arc_swap::ArcSwap;
@@ -173,7 +173,7 @@ impl BasicSimEnv {
         self.max_range
     }
     pub fn lidarscan(&self) -> LidarScan {
-        let mut rng = thread_rng();
+        let mut rng = rand::rng();
         let ang_noise = Normal::new(0.0, self.ang_noise).unwrap();
         let norm = Normal::new(0.0, 1.0).unwrap();
 

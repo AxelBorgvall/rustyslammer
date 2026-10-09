@@ -2,14 +2,13 @@
 name = "rustyslammer"
 version = "0.1.0"
 edition = "2024"
-RUST_BACKTRACE=1
 default-run = "rustyslammer"
 
 [dependencies]
-rayon="1.8" # parallel loops
-minifb = "0.27" # windows
-arc-swap = "1" # Thread synced data
-rustc-hash="1.1" # Fast hashmap
-rand = "0.8" # Random numbers
-rand_distr = "0.4"
-device_query = "1.2" # Keyboard reading
+rayon="1.12" # parallel loops
+minifb = "0.29" # windows
+arc-swap = "1.9" # Thread synced data
+rustc-hash="2.1" # Fast hashmap
+rand = "0.10" # Random numbers
+rand_distr = "0.6"
+device_query="4.0"

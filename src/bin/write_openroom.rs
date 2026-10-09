@@ -1,0 +1,98 @@
+use minifb::{Key, Window, WindowOptions};
+use std::io::{self,  BufWriter,  Write};
+use std::{cmp, fs::File};
+#[allow(non_upper_case_globals)]
+const dx: f32 = 0.05;
+const L: usize = (20.0 / dx) as usize;
+
+#[allow(non_camel_case_types)]
+struct iPoint {
+    x: i32,
+    y: i32,
+}
+
+impl iPoint {
+    fn add(a: &iPoint, b: &iPoint) -> iPoint {
+        iPoint {
+            x: a.x + b.x,
+            y: a.y + b.y,
+        }
+    }
+}
+
+pub fn save_grid(
+    path: &str,
+    height: u32,
+    width: u32,
+    stepsize: f32,
+    data: &[bool],
+) -> io::Result<()> {
+    let file = File::create(path)?;
+    let mut writer = BufWriter::new(file);
+
+    writer.write_all(&height.to_le_bytes())?;
+    writer.write_all(&width.to_le_bytes())?;
+    writer.write_all(&stepsize.to_le_bytes())?;
+    let len = data.len() as u64;
+    writer.write_all(&len.to_le_bytes())?;
+
+    for &val in data {
+        writer.write_all(&[val as u8])?;
+    }
+    Ok(())
+}
+fn draw_rect(grid: &mut Vec<bool>, x0: iPoint, r: iPoint) {
+    let x1 = iPoint::add(&x0, &r);
+
+    for i in cmp::max(x0.x, 0)..cmp::min(x1.x, L as i32) {
+        for j in cmp::max(x0.y, 0)..cmp::min(x1.y, L as i32) {
+            grid[(j as usize) * L + i as usize] = true;
+        }
+    }
+}
+
+fn main() {
+    let mut grid = vec![false; L * L];
+
+
+    // Wall of edges
+    grid.chunks_exact_mut(L).enumerate().for_each(|(y, row)| {
+        if y == 0 || y == L - 1 {
+            row.fill(true);
+        } else {
+            match row {
+                [first, .., last] => {
+                    *first = true;
+                    *last = true;
+                }
+                [single] => {
+                    *single = true;
+                }
+                [] => unreachable!(),
+            }
+        }
+    });
+
+    let buffer: Vec<u32> = grid
+        .iter()
+        .map(|&is_filled| if is_filled { 0xFFFFFF } else { 0x000000 })
+        .collect();
+
+    let mut window = Window::new(
+        "Grid Visualization - Press ESC to exit",
+        L,
+        L,
+        WindowOptions::default(),
+    )
+    .unwrap_or_else(|e| {
+        panic!("{}", e);
+    });
+
+	window.set_target_fps(10);
+
+    while window.is_open() && !window.is_key_down(Key::Escape) {
+        window.update_with_buffer(&buffer, L, L).unwrap();
+    }
+
+    save_grid("data/map1.dat", L as u32, L as u32, dx, &grid).expect("GRAAAAHHHHH");
+}

@@ -4,7 +4,7 @@ use crate::robo::{
     LidarScan, Map, RobotPose, SlamImage, bresenham::Bresenham, to_world, world2cell,
 };
 use arc_swap::ArcSwap;
-use rand::{Rng, thread_rng};
+use rand::{Rng, RngExt};
 use rand_distr::{Distribution, Normal};
 use rayon::iter::{IndexedParallelIterator, IntoParallelRefMutIterator, ParallelIterator};
 use std::time::Duration;
@@ -307,7 +307,7 @@ impl OGMapping {
         let delta = imu_data - self.last_imu;
         self.last_imu = imu_data;
 
-        let mut rng = thread_rng();
+        let mut rng = rand::rng();
         let noise_dist_x =
             Normal::new(0.0, (delta.x / dt * self.core.vel_noise).abs() + 0.005).unwrap();
         let noise_dost_y =
@@ -323,8 +323,7 @@ impl OGMapping {
             .zip(self.particle_maps.par_iter_mut())
             .zip(self.weights.par_iter_mut())
             .for_each(|((particle, map), weight)| {
-                let mut rng = rand::thread_rng();
-                let prior = RobotPose {
+                let mut rng = rand::rng();                let prior = RobotPose {
                     x: particle.x + noise_dist_x.sample(&mut rng),
                     y: particle.y + noise_dist_x.sample(&mut rng),
                     theta: particle.theta + noise_dist_theta.sample(&mut rng),
@@ -363,7 +362,7 @@ impl OGMapping {
             return;
         }
 
-        let r: f32 = thread_rng().gen_range(0.0..1.0 / n as f32);
+        let r: f32 = rand::rng().random_range(0.0..1.0 / n as f32);
         let mut counts = vec![0usize; n];
         let (mut i, mut cum_weight) = (0, self.weights[0]);
         for k in 0..n {
@@ -469,7 +468,7 @@ impl OGMapping {
                 self.screenbuffer[pos.0 + pos.1 * size.0 * CHUNK_L] = color;
             }
         }
-        (w,h)
+        (w, h)
     }
 }
 

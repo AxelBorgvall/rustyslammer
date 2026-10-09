@@ -301,6 +301,16 @@ impl Mul for RobotPose {
         }
     }
 }
+impl Mul<f32> for RobotPose{
+	type Output=Self;
+	fn mul(self, rhs: f32) -> Self::Output {
+		Self{
+			x:self.x*rhs,
+			y:self.y*rhs,
+			theta:self.theta*rhs,
+		}
+	}
+}
 impl Div<f32> for RobotPose {
     type Output = Self;
     fn div(self, rhs: f32) -> Self::Output {
