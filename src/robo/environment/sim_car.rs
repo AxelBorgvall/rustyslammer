@@ -6,7 +6,7 @@ use std::{
         atomic::{AtomicBool, Ordering::Relaxed},
     },
     thread::{self, JoinHandle},
-    time::Instant,
+    time::{Duration, Instant},
 };
 
 use arc_swap::ArcSwap;
@@ -271,9 +271,9 @@ impl CarEnv {
             let minx = row.first().unwrap().0 as usize;
             let maxx = row.last().unwrap().0 as usize;
             let y = row[0].1 as usize;
-			for x in minx..maxx{
-				self.screenbuffer[x+self.nw*y]=color;
-			}
+            for x in minx..maxx {
+                self.screenbuffer[x + self.nw * y] = color;
+            }
         }
     }
 
@@ -312,17 +312,21 @@ impl CarEnv {
             }
         }
 
-		let corns:[(i32,i32);4]=self.corners(self.pose).map(|pos| self.reals2idx((pos.x,pos.y)));
-		let edges=[
-			Bresenham::new(corns[0],corns[1]),
-			Bresenham::new(corns[1],corns[2]),
-			Bresenham::new(corns[2],corns[3]),
-			Bresenham::new(corns[3],corns[0]),
-		];
-		self.draw_box(edges, 0x00FF8000);
+        let corns: [(i32, i32); 4] = self
+            .corners(self.pose)
+            .map(|pos| self.reals2idx((pos.x, pos.y)));
+        let edges = [
+            Bresenham::new(corns[0], corns[1]),
+            Bresenham::new(corns[1], corns[2]),
+            Bresenham::new(corns[2], corns[3]),
+            Bresenham::new(corns[3], corns[0]),
+        ];
+        self.draw_box(edges, 0x00FF8000);
 
-        let x_offset = self.real2idx(self.pose.x + self.pose.theta.cos() * self.robo_l*1.2 * self.dx);
-        let y_offset = self.real2idx(self.pose.y + self.pose.theta.sin() * self.robo_l*1.2 * self.dx);
+        let x_offset =
+            self.real2idx(self.pose.x + self.pose.theta.cos() * self.robo_l * 1.3 * self.dx);
+        let y_offset =
+            self.real2idx(self.pose.y + self.pose.theta.sin() * self.robo_l * 1.3 * self.dx);
         let nose = Bresenham::new(
             (self.real2idx(self.pose.x), self.real2idx(self.pose.y)),
             (x_offset, y_offset),
@@ -348,10 +352,54 @@ impl Environment for CarEnv {
             let mut lastdraw = Instant::now();
 
             while !shutdown_flag.load(Relaxed) {
-                // Step env
-                // publish lidar
-                // publish imu
-                // publish render
+                let current_control = {
+                    let guard = control_in.read().unwrap();
+                    *guard
+                };
+                self.step_fwd(current_control);
+
+                // Publish lidardata
+                let scan = self.lidarscan();
+                lidar_out.store(Arc::new(scan.clone()));
+
+                // Publish IMUData
+                {
+                    let mut mtx = imu_out.write().unwrap();
+                    *mtx = self.pose;
+                }
+
+                let now = Instant::now();
+                let dt = lastcall - now;
+                lastcall = now;
+                if dt.as_secs_f32() < self.seconds_per_iter {
+                    thread::sleep(Duration::from_secs_f32(self.seconds_per_iter) - dt);
+                }
+
+                // Publish environment render
+                let now = Instant::now();
+                let dt_draw = now - lastdraw;
+                if dt_draw > Duration::from_millis(80) {
+                    lastdraw = now;
+                    self.render(Some(&scan));
+                    if let Some(mailbox) = &img_out {
+                        let current_buffer = std::mem::take(&mut self.screenbuffer);
+                        let new_frame = Arc::new(EnvImage {
+                            data: current_buffer,
+                            width: self.nw,
+                            height: self.nh,
+                        });
+
+                        let old_frame_arc = mailbox.swap(new_frame);
+                        match Arc::try_unwrap(old_frame_arc) {
+                            Ok(old_frame) => {
+                                self.screenbuffer = old_frame.data;
+                            }
+                            Err(_) => {
+                                self.screenbuffer = vec![0; self.nw * self.nh];
+                            }
+                        }
+                    }
+                }
             }
         })
     }
