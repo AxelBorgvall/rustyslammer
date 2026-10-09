@@ -1,4 +1,4 @@
-use crate::robo::{ LidarScan, Map, TwoDOFControl};
+use crate::robo::{ LidarScan, Map, TwoDOFControl, controller::Controller};
 use arc_swap::ArcSwap;
 use std::{ f32::consts::PI, sync::{
         Arc, RwLock,
@@ -6,15 +6,6 @@ use std::{ f32::consts::PI, sync::{
     }, thread::{self, JoinHandle}, time::Duration,
 };
 
-pub trait Controller: Send {
-    fn spawn(
-        self,
-        shutdown_flag: Arc<AtomicBool>,
-        lidar_in: Arc<ArcSwap<LidarScan>>,
-        map_in: Arc<ArcSwap<Map>>,
-        ctrl_out: Arc<RwLock<TwoDOFControl>>,
-    ) -> JoinHandle<()>;
-}
 
 pub struct BasicController {
     pub speed: f32,

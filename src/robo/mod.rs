@@ -319,6 +319,9 @@ impl RobotPose {
             theta: self.theta.abs(),
         }
     }
+	fn from_pos(p:Pos,theta:f32)->Self{
+		Self { x: p.x, y: p.y, theta }
+	}
 }
 #[derive(Clone, Copy)] // I literally just want numerical syntax
 pub struct Pos{

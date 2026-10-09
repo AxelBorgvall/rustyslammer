@@ -49,7 +49,7 @@ pub struct CarEnv {
     pub dx: f32,
     pub grid: Vec<bool>,
 
-    // Sim speed
+    // Sim speed (NOTE: the ratio should probably stay 1 cause slam uses realtime for noise model)
     pub dt: f32,
     pub seconds_per_iter: f32,
 
@@ -81,7 +81,7 @@ impl CarEnv {
             .collect();
 
         let mut this = Self {
-            max_speed: 0.0,
+            max_speed: 1.0,
             max_whang: 45.0 * (PI / 180.0),
             robo_w: 0.2,
             robo_l: 0.4,
@@ -255,7 +255,9 @@ impl CarEnv {
             max_distance: self.max_range,
         }
     }
-    pub fn step_fwd(&mut self, input: TwoDOFControl) {}
+    pub fn step_fwd(&mut self, input: TwoDOFControl) {
+
+	}
 
     fn drawline(&mut self, line: Bresenham, color: u32) {
         for (x, y) in line {
@@ -312,6 +314,7 @@ impl CarEnv {
             }
         }
 
+		// Draw car body
         let corns: [(i32, i32); 4] = self
             .corners(self.pose)
             .map(|pos| self.reals2idx((pos.x, pos.y)));
@@ -323,16 +326,36 @@ impl CarEnv {
         ];
         self.draw_box(edges, 0x00FF8000);
 
-        let x_offset =
-            self.real2idx(self.pose.x + self.pose.theta.cos() * self.robo_l * 1.3 * self.dx);
-        let y_offset =
-            self.real2idx(self.pose.y + self.pose.theta.sin() * self.robo_l * 1.3 * self.dx);
-        let nose = Bresenham::new(
-            (self.real2idx(self.pose.x), self.real2idx(self.pose.y)),
-            (x_offset, y_offset),
-        );
+		// Draw wheels
+		let wheel_len=2.5f32;
+        let (s, c) = self.pose.theta.sin_cos();
 
-        self.drawline(nose, 0x00FF000000);
+		let l_offset=wheel_len*0.5;
+        let corner = Pos {
+            x: self.pose.x - l_offset * c - self.wh_w * 0.5 * s,
+            y: self.pose.y - l_offset * s + self.wh_w * 0.5 * c,
+        };
+        let delta_1 = Pos { x: s, y: -c } * self.wh_w;
+        let delta_2 = Pos { x: c, y: s } * self.wh_l;
+
+        let wheels=[
+            RobotPose::from_pos(corner, self.pose.theta),
+            RobotPose::from_pos(corner+delta_1, self.pose.theta),
+            RobotPose::from_pos(corner+delta_1+delta_2, self.pose.theta),
+            RobotPose::from_pos(corner+delta_2, self.pose.theta),
+        ].map(
+			|pose| {
+				let (s,c)=pose.theta.sin_cos();
+				Bresenham::new(self.reals2idx((pose.x,pose.y)),
+				self.reals2idx((pose.x+c*wheel_len,pose.y+s*wheel_len))
+			)
+			}
+		);
+		for line in wheels{
+			self.drawline(line, 0x00000000);
+		}
+
+
     }
 }
 
