@@ -9,7 +9,6 @@ use rand_distr::{Distribution, Normal};
 use rayon::iter::{IndexedParallelIterator, IntoParallelRefMutIterator, ParallelIterator};
 use std::time::Duration;
 use std::time::Instant;
-use std::usize;
 use std::{
     sync::{
         Arc, RwLock,
