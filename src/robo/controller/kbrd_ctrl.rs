@@ -61,7 +61,7 @@ impl Controller for KeyBoardController {
                     mtx.rot_r = whang;
                 }
 
-                thread::sleep(Duration::from_secs_f32(0.02));
+                thread::sleep(Duration::from_secs_f32(0.01));
             }
         })
     }

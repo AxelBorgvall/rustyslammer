@@ -130,16 +130,17 @@ impl CarEnv {
                 } else {
                     // after 2 pi we want L_car diff in rad to search nicely.
                     search_ang += dtheta;
-                    search_rad += (this.robo_l / dtheta) / (2.0 * PI);
+                    search_rad += (this.robo_l * dtheta) / (2.0 * PI);
                     let (s, c) = search_ang.sin_cos();
                     prop_pose = RobotPose {
                         x: this.pose.x + c * search_rad,
-                        y: this.pose.y + s * search_ang,
+                        y: this.pose.y + s * search_rad,
                         theta: this.pose.theta,
                     }
+
                 }
             }
-            if found {
+            if !found {
                 prop_pose
             } else {
                 panic!("Could not find a place for the robo. Sorry.")
@@ -169,7 +170,7 @@ impl CarEnv {
     }
     fn collision(&self, pose: RobotPose) -> bool {
         // Bresenham along all 4 sides of the cars outer body
-        let corners = self.corners(self.pose);
+        let corners = self.corners(pose);
 
         let mut edges = [
             Bresenham::new(
@@ -191,13 +192,10 @@ impl CarEnv {
         ];
         edges.into_iter().any(|mut e| {
             e.any(|(x, y)| {
-                x >= 0
-                    && y >= 0
+                x >= 0 && y >= 0
                     && self
-                        .grid
-                        .get(x as usize + y as usize * self.nw)
-                        .copied()
-                        .unwrap_or(false)
+                        .grid[x as usize+self.nw*y as usize]
+
             })
         })
     }
