@@ -82,7 +82,7 @@ impl CarEnv {
 
         let mut this = Self {
             max_speed: 1.0,
-            max_whang: 45.0 * (PI / 180.0),
+            max_whang: 40.0 * (PI / 180.0),
             robo_w: 0.2,
             robo_l: 0.4,
             wh_w: 0.15,
@@ -137,7 +137,6 @@ impl CarEnv {
                         y: this.pose.y + s * search_rad,
                         theta: this.pose.theta,
                     }
-
                 }
             }
             if !found {
@@ -191,12 +190,7 @@ impl CarEnv {
             ),
         ];
         edges.into_iter().any(|mut e| {
-            e.any(|(x, y)| {
-                x >= 0 && y >= 0
-                    && self
-                        .grid[x as usize+self.nw*y as usize]
-
-            })
+            e.any(|(x, y)| x >= 0 && y >= 0 && self.grid[x as usize + self.nw * y as usize])
         })
     }
     fn real2idx(&self, x: f32) -> i32 {
@@ -255,36 +249,38 @@ impl CarEnv {
     }
     pub fn step_fwd(&mut self, input: TwoDOFControl) {
         let wh_cos = self.whang.cos(); // max speed is whang dependent
-        self.v += 2.0
-            * (input
-                .trans_r
-                .clamp(-self.max_speed * wh_cos, self.max_speed * wh_cos)
-                - self.v)
-            * self.dt;
-        self.whang +=
-            6.0 * (input.rot_r.clamp(-self.max_whang, self.max_whang) - self.max_whang) * self.dt;
-        let (s, c) = self.pose.theta.sin_cos();
+        let wh_cos = self.whang.cos();
+        let target_v = input.trans_r.clamp(
+            -self.max_speed * wh_cos.abs(),
+            self.max_speed * wh_cos.abs(),
+        );
+        self.v += 3.0 * (target_v - self.v) * self.dt;
+
+        let target_whang = input.rot_r.clamp(-self.max_whang, self.max_whang);
+        self.whang += 6.0 * (target_whang - self.whang) * self.dt;
+		
+		let (s,c)=self.pose.theta.sin_cos();
         let new_pose = RobotPose {
-            x: self.pose.x + self.v * c,
-            y: self.pose.y + self.v * s,
+            x: self.pose.x + self.v * c * self.dt,
+            y: self.pose.y + self.v * s * self.dt,
             theta: self.pose.theta + (self.v / self.wh_l) * self.whang.tan() * self.dt,
         };
-		if !self.collision(new_pose){
-			self.pose=new_pose;
-		} else {
-			self.v=0.0;
-			// binsearch
-			let mut ratio=0.5f32;
-			for i in 0..5{
-				let prop_pose= (new_pose*ratio+self.pose*(1.0-ratio));
-				if !self.collision(prop_pose){
-					self.pose=prop_pose;
-					break;
-				} else {
-					ratio*=0.5;
-				}
-			}
-		}
+        if !self.collision(new_pose) {
+            self.pose = new_pose;
+        } else {
+            self.v = 0.0;
+            // binsearch
+            let mut ratio = 0.5f32;
+            for i in 0..5 {
+                let prop_pose = (new_pose * ratio + self.pose * (1.0 - ratio));
+                if !self.collision(prop_pose) {
+                    self.pose = prop_pose;
+                    break;
+                } else {
+                    ratio *= 0.5;
+                }
+            }
+        }
     }
 
     fn drawline(&mut self, line: Bresenham, color: u32) {
@@ -355,7 +351,7 @@ impl CarEnv {
         self.draw_box(edges, 0x00FF8000);
 
         // Draw wheels
-        let wheel_len = 2.5f32;
+        let wheel_len = 2.5*self.dx;
         let (s, c) = self.pose.theta.sin_cos();
 
         let l_offset = wheel_len * 0.5;
