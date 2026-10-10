@@ -61,6 +61,7 @@ impl CarEnv {
     pub fn new(path: &str) -> Self {
         let (nh, nw, dx, grid) =
             io::load_data(path).expect("Failed to load the Map from the path specified.");
+		println!("Screensize is: {}",nh as u128*nw as u128);
         let nh = nh as usize;
         let nw = nw as usize;
         let w = nw as f32 * dx;
@@ -119,14 +120,14 @@ impl CarEnv {
             let mut prop_pose = this.pose;
             let mut found = false;
             let dtheta = 0.02f32;
-			let mut c=0;
+            let mut c = 0;
             while this
                 .corners(prop_pose)
                 .iter()
                 .all(|p| p.x >= 0.0 && p.x < this.w && p.y >= 0.0 && p.y < this.h)
             {
-				c+=1;
-				println!("{c}");
+                c += 1;
+                println!("{c}");
                 if !this.collision(prop_pose) {
                     found = true;
                     break;
@@ -193,7 +194,11 @@ impl CarEnv {
             ),
         ];
         edges.into_iter().any(|mut e| {
-            e.any(|(x, y)| x >= 0 && y >= 0 && self.grid[x as usize + self.nw * y as usize])
+            e.any(|(x, y)| {
+                let xu = x.max(0) as usize;
+                let yu = y.max(0) as usize;
+                x >= 0 && y >= 0 && xu < self.nw && yu < self.nh && self.grid[xu + yu * self.nw]
+            })
         })
     }
     fn real2idx(&self, x: f32) -> i32 {
@@ -261,8 +266,8 @@ impl CarEnv {
 
         let target_whang = input.rot_r.clamp(-self.max_whang, self.max_whang);
         self.whang += 6.0 * (target_whang - self.whang) * self.dt;
-		
-		let (s,c)=self.pose.theta.sin_cos();
+
+        let (s, c) = self.pose.theta.sin_cos();
         let new_pose = RobotPose {
             x: self.pose.x + self.v * c * self.dt,
             y: self.pose.y + self.v * s * self.dt,
@@ -354,7 +359,7 @@ impl CarEnv {
         self.draw_box(edges, 0x00FF8000);
 
         // Draw wheels
-        let wheel_len = 2.5*self.dx;
+        let wheel_len = 2.5 * self.dx;
         let (s, c) = self.pose.theta.sin_cos();
 
         let l_offset = wheel_len * 0.5;
@@ -368,8 +373,8 @@ impl CarEnv {
         let wheels = [
             RobotPose::from_pos(corner, self.pose.theta),
             RobotPose::from_pos(corner + delta_1, self.pose.theta),
-            RobotPose::from_pos(corner + delta_1 + delta_2, self.pose.theta+self.whang),
-            RobotPose::from_pos(corner + delta_2, self.pose.theta+self.whang),
+            RobotPose::from_pos(corner + delta_1 + delta_2, self.pose.theta + self.whang),
+            RobotPose::from_pos(corner + delta_2, self.pose.theta + self.whang),
         ]
         .map(|pose| {
             let (s, c) = pose.theta.sin_cos();
@@ -417,7 +422,7 @@ impl Environment for CarEnv {
                 }
 
                 let now = Instant::now();
-                let dt = now-lastcall;
+                let dt = now - lastcall;
                 lastcall = now;
                 if dt.as_secs_f32() < self.seconds_per_iter {
                     thread::sleep(Duration::from_secs_f32(self.seconds_per_iter) - dt);
