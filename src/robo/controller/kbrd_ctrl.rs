@@ -48,10 +48,10 @@ impl Controller for KeyBoardController {
                 if keys.contains(&Keycode::S) || keys.contains(&Keycode::Down) {
                     speed -= self.max_speed;
                 }
-                if keys.contains(&Keycode::A) || keys.contains(&Keycode::Left) {
+                if keys.contains(&Keycode::D) || keys.contains(&Keycode::Right) {
                     whang += self.max_whang;
                 }
-                if keys.contains(&Keycode::D) || keys.contains(&Keycode::Right) {
+                if keys.contains(&Keycode::A) || keys.contains(&Keycode::Left) {
                     whang -= self.max_whang;
                 }
 

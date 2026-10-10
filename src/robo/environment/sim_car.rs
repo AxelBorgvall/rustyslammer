@@ -119,12 +119,15 @@ impl CarEnv {
             let mut prop_pose = this.pose;
             let mut found = false;
             let dtheta = 0.02f32;
-            while !this
+			let mut c=0;
+            while this
                 .corners(prop_pose)
                 .iter()
                 .all(|p| p.x >= 0.0 && p.x < this.w && p.y >= 0.0 && p.y < this.h)
             {
-                if !this.collision(pose) {
+				c+=1;
+				println!("{c}");
+                if !this.collision(prop_pose) {
                     found = true;
                     break;
                 } else {
@@ -139,7 +142,7 @@ impl CarEnv {
                     }
                 }
             }
-            if !found {
+            if found {
                 prop_pose
             } else {
                 panic!("Could not find a place for the robo. Sorry.")
@@ -365,8 +368,8 @@ impl CarEnv {
         let wheels = [
             RobotPose::from_pos(corner, self.pose.theta),
             RobotPose::from_pos(corner + delta_1, self.pose.theta),
-            RobotPose::from_pos(corner + delta_1 + delta_2, self.pose.theta),
-            RobotPose::from_pos(corner + delta_2, self.pose.theta),
+            RobotPose::from_pos(corner + delta_1 + delta_2, self.pose.theta+self.whang),
+            RobotPose::from_pos(corner + delta_2, self.pose.theta+self.whang),
         ]
         .map(|pose| {
             let (s, c) = pose.theta.sin_cos();
@@ -414,7 +417,7 @@ impl Environment for CarEnv {
                 }
 
                 let now = Instant::now();
-                let dt = lastcall - now;
+                let dt = now-lastcall;
                 lastcall = now;
                 if dt.as_secs_f32() < self.seconds_per_iter {
                     thread::sleep(Duration::from_secs_f32(self.seconds_per_iter) - dt);
