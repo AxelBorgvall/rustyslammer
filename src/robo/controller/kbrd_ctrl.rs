@@ -1,4 +1,4 @@
-use crate::robo::{LidarScan, Map, TwoDOFControl, controller::Controller};
+use crate::robo::{LidarScan, Map, RobotPose, SlamImage, TwoDOFControl, controller::Controller};
 use arc_swap::ArcSwap;
 use device_query::{DeviceQuery, DeviceState, Keycode};
 use std::{
@@ -31,8 +31,11 @@ impl Controller for KeyBoardController {
         shutdown_flag: Arc<AtomicBool>,
         lidar_in: Arc<ArcSwap<LidarScan>>,
         map_in: Arc<ArcSwap<Map>>,
+		pos_in:Arc<RwLock<RobotPose>>,
         ctrl_out: Arc<RwLock<TwoDOFControl>>,
+		img_out:  Option<Arc<ArcSwap<SlamImage>>>,
     ) -> JoinHandle<()> {
+		assert!(img_out.is_none(),"KeyBoardController does not draw images, pass None instead");
         thread::spawn(move || {
             let device_state = DeviceState::new();
 

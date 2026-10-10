@@ -26,6 +26,7 @@ pub trait Slam: Send {
         shutdown_flag: Arc<AtomicBool>,
         imu_in: Arc<RwLock<RobotPose>>,
         lidar_in: Arc<ArcSwap<LidarScan>>,
+		pos_out: Arc<RwLock<RobotPose>>,
         map_out: Arc<ArcSwap<Map>>,
         img_out: Option<Arc<ArcSwap<SlamImage>>>,
     ) -> JoinHandle<()>;
@@ -490,6 +491,7 @@ impl Slam for OGMapping {
         shutdown_flag: Arc<AtomicBool>,
         imu_in: Arc<RwLock<RobotPose>>,
         lidar_in: Arc<ArcSwap<LidarScan>>,
+		pos_out: Arc<RwLock<RobotPose>>,
         map_out: Arc<ArcSwap<Map>>,
         img_out: Option<Arc<ArcSwap<SlamImage>>>,
     ) -> JoinHandle<()> {
@@ -521,7 +523,7 @@ impl Slam for OGMapping {
                 self.update_maps(&lidar_data);
                 self.resample();
 
-                // Send map
+                // Send map+pos
                 let (best, _) = self
                     .weights
                     .iter()
@@ -529,6 +531,10 @@ impl Slam for OGMapping {
                     .max_by(|(_, a), (_, b)| a.total_cmp(b))
                     .unwrap_or((0, &0.0));
                 map_out.store(Arc::new(self.particle_maps[best].clone()));
+				{
+					let mut mtx=pos_out.write().unwrap();
+					*mtx=self.particles[best];
+				}
 
                 // Send render
                 if let Some(mailbox) = &img_out {

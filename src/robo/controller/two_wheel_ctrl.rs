@@ -1,4 +1,4 @@
-use crate::robo::{ LidarScan, Map, TwoDOFControl, controller::Controller};
+use crate::robo::{ LidarScan, Map, RobotPose, SlamImage, TwoDOFControl, controller::Controller};
 use arc_swap::ArcSwap;
 use std::{ f32::consts::PI, sync::{
         Arc, RwLock,
@@ -68,8 +68,11 @@ impl Controller for BasicController {
         shutdown_flag: Arc<AtomicBool>,
         lidar_in: Arc<ArcSwap<LidarScan>>,
         map_in: Arc<ArcSwap<Map>>,
+		pos_in:Arc<RwLock<RobotPose>>,
         ctrl_out: Arc<RwLock<TwoDOFControl>>,
+		img_out:  Option<Arc<ArcSwap<SlamImage>>>,
     ) -> JoinHandle<()> {
+		assert!(img_out.is_none(),"BasicController does not draw images, pass None instead");
         thread::spawn(move || {
             while !shutdown_flag.load(Relaxed) {
                 let lidardata = lidar_in.load().clone();

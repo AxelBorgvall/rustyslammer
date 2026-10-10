@@ -61,7 +61,7 @@ impl CarEnv {
     pub fn new(path: &str) -> Self {
         let (nh, nw, dx, grid) =
             io::load_data(path).expect("Failed to load the Map from the path specified.");
-		println!("Screensize is: {}",nh as u128*nw as u128);
+        println!("Screensize is: {}", nh as u128 * nw as u128);
         let nh = nh as usize;
         let nw = nw as usize;
         let w = nw as f32 * dx;
