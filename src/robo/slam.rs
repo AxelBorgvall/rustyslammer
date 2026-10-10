@@ -491,6 +491,10 @@ impl Slam for OGMapping {
                     let guard = imu_in.read().unwrap();
                     *guard
                 };
+				if !imu_state.x.is_finite()||!imu_state.y.is_finite()||!imu_state.theta.is_finite(){
+					thread::sleep(Duration::from_millis(50));
+					continue;
+				}
                 let lidar_data = lidar_in.load_full();
 
                 // Update state
