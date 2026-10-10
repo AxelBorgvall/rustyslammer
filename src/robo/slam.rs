@@ -297,21 +297,32 @@ impl OGMapping {
             particles: vec![RobotPose::default(); n_part],
             particle_maps: vec![Map::default(); n_part],
             weights: vec![1.0; n_part],
-            last_imu: RobotPose::default(),
+            last_imu: RobotPose {
+                x: f32::NAN,
+                y: f32::NAN,
+                theta: f32::NAN,
+            },
             screenbuffer: vec![],
         }
     }
 
     pub fn update_positions(&mut self, imu_data: RobotPose, lidar_data: &LidarScan, dt: f32) {
         // Compute priors
-        let delta = imu_data - self.last_imu;
+        let delta = {
+            if self.last_imu.x.is_finite()
+                && self.last_imu.x.is_finite()
+                && self.last_imu.x.is_finite()
+            {
+                imu_data - self.last_imu
+            } else {
+                RobotPose::default()
+            }
+        };
         self.last_imu = imu_data;
 
         let mut rng = rand::rng();
         let noise_dist_x =
             Normal::new(0.0, (delta.x / dt * self.core.vel_noise).abs() + 0.005).unwrap();
-        let noise_dost_y =
-            Normal::new(0.0, (delta.y / dt * self.core.vel_noise).abs() + 0.005).unwrap();
         let noise_dist_theta =
             Normal::new(0.0, (delta.theta / dt * self.core.ang_noise).abs() + 0.01).unwrap();
 
@@ -323,7 +334,8 @@ impl OGMapping {
             .zip(self.particle_maps.par_iter_mut())
             .zip(self.weights.par_iter_mut())
             .for_each(|((particle, map), weight)| {
-                let mut rng = rand::rng();                let prior = RobotPose {
+                let mut rng = rand::rng();
+                let prior = RobotPose {
                     x: particle.x + noise_dist_x.sample(&mut rng),
                     y: particle.y + noise_dist_x.sample(&mut rng),
                     theta: particle.theta + noise_dist_theta.sample(&mut rng),
@@ -491,17 +503,20 @@ impl Slam for OGMapping {
                     let guard = imu_in.read().unwrap();
                     *guard
                 };
-				if !imu_state.x.is_finite()||!imu_state.y.is_finite()||!imu_state.theta.is_finite(){
-					thread::sleep(Duration::from_millis(50));
-					continue;
-				}
+                if !imu_state.x.is_finite()
+                    || !imu_state.y.is_finite()
+                    || !imu_state.theta.is_finite()
+                {
+                    thread::sleep(Duration::from_millis(50));
+                    continue;
+                }
                 let lidar_data = lidar_in.load_full();
 
                 // Update state
                 let now = Instant::now();
                 let dt = now.duration_since(last_upos).as_secs_f32();
                 last_upos = now;
-                println!("dt slam={dt}");
+                // println!("dt slam={dt}");
                 self.update_positions(imu_state, &lidar_data, dt);
                 self.update_maps(&lidar_data);
                 self.resample();

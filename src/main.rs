@@ -14,7 +14,7 @@ mod robo;
 // }
 
 fn main() {
-    let env = CarEnv::new("data/map1.dat");
+    let env = CarEnv::new("data/maze.dat");
     let controller = KeyBoardController::default();
     let slammer = OGMapping::new(30, 0.05);
     let runner = SimRunner::new(env, slammer, controller);
