@@ -1,2 +1,4 @@
 /target
-print_size.py
+*.py
+*.txt
+.vscode

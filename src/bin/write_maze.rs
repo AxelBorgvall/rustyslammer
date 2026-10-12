@@ -25,10 +25,10 @@ const WH_L: f32 = 0.35;
 const MAX_WHANG: f32 = 40.0 * (PI / 180.0);
 const TAN_WHANG: f32 = const_tan!(MAX_WHANG);
 const TURN_RAD: f32 = WH_L / TAN_WHANG;
-const CHUNK_L: f32 = (TURN_RAD + ROBO_W * 0.5 + ROBO_L * 0.5) * 1.2;
+const CHUNK_L: f32 = (TURN_RAD + ROBO_W * 0.5 + ROBO_L * 0.5) * 2.2;
 
 const CHUNK_NL: usize = (CHUNK_L / DX).ceil() as usize;
-const N_CHUNKS: usize = 20;
+const N_CHUNKS: usize = 6;
 const L: usize = N_CHUNKS * CHUNK_NL;
 
 #[allow(non_camel_case_types)]

@@ -61,7 +61,6 @@ impl CarEnv {
     pub fn new(path: &str) -> Self {
         let (nh, nw, dx, grid) =
             io::load_data(path).expect("Failed to load the Map from the path specified.");
-        println!("Screensize is: {}", nh as u128 * nw as u128);
         let nh = nh as usize;
         let nw = nw as usize;
         let w = nw as f32 * dx;
@@ -120,14 +119,11 @@ impl CarEnv {
             let mut prop_pose = this.pose;
             let mut found = false;
             let dtheta = 0.02f32;
-            let mut c = 0;
             while this
                 .corners(prop_pose)
                 .iter()
                 .all(|p| p.x >= 0.0 && p.x < this.w && p.y >= 0.0 && p.y < this.h)
             {
-                c += 1;
-                println!("{c}");
                 if !this.collision(prop_pose) {
                     found = true;
                     break;
