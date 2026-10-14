@@ -1,6 +1,5 @@
 use crate::robo::{LidarScan, Map, RobotPose, SlamImage, TwoDOFControl, controller::Controller};
 use arc_swap::ArcSwap;
-use device_query::{DeviceQuery, DeviceState, Keycode};
 use std::{
     f32::consts::PI,
     sync::{
@@ -25,23 +24,27 @@ impl Default for KeyBoardController {
     }
 }
 
+#[cfg(target_os = "windows")]
+use device_query::{DeviceQuery, DeviceState, Keycode};
+
+#[cfg(target_os = "windows")]
 impl Controller for KeyBoardController {
     fn spawn(
         self,
         shutdown_flag: Arc<AtomicBool>,
         lidar_in: Arc<ArcSwap<LidarScan>>,
         map_in: Arc<ArcSwap<Map>>,
-		pos_in:Arc<RwLock<RobotPose>>,
+        pos_in: Arc<RwLock<RobotPose>>,
         ctrl_out: Arc<RwLock<TwoDOFControl>>,
-		img_out:  Option<Arc<ArcSwap<SlamImage>>>,
+        img_out: Option<Arc<ArcSwap<SlamImage>>>,
     ) -> JoinHandle<()> {
-		assert!(img_out.is_none(),"KeyBoardController does not draw images, pass None instead");
+        assert!(img_out.is_none(), "KeyBoardController does not draw images");
+
         thread::spawn(move || {
             let device_state = DeviceState::new();
 
             while !shutdown_flag.load(Relaxed) {
                 let keys: Vec<Keycode> = device_state.get_keys();
-
                 let mut speed = 0.0;
                 let mut whang = 0.0;
 
@@ -58,12 +61,65 @@ impl Controller for KeyBoardController {
                     whang -= self.max_whang;
                 }
 
-                {
-                    let mut mtx = ctrl_out.write().unwrap();
+                if let Ok(mut mtx) = ctrl_out.write() {
                     mtx.trans_r = speed;
                     mtx.rot_r = whang;
                 }
+                thread::sleep(Duration::from_secs_f32(0.01));
+            }
+        })
+    }
+}
 
+#[cfg(target_os = "linux")]
+use evdev::Key;
+
+#[cfg(target_os = "linux")]
+impl Controller for KeyBoardController {
+    fn spawn(
+        self,
+        shutdown_flag: Arc<AtomicBool>,
+        lidar_in: Arc<ArcSwap<LidarScan>>,
+        map_in: Arc<ArcSwap<Map>>,
+        pos_in: Arc<RwLock<RobotPose>>,
+        ctrl_out: Arc<RwLock<TwoDOFControl>>,
+        img_out: Option<Arc<ArcSwap<SlamImage>>>,
+    ) -> JoinHandle<()> {
+        assert!(img_out.is_none(), "KeyBoardController does not draw images");
+
+        thread::spawn(move || {
+            // Find the first device that has a 'W' key (filters out mice/power buttons)
+            let mut keyboard = evdev::enumerate()
+                .find(|(_, dev)| {
+                    dev.supported_keys()
+                        .map_or(false, |keys| keys.contains(Key::KEY_W))
+                })
+                .map(|(_, dev)| dev)
+                .expect("No keyboard found in /dev/input!");
+
+            while !shutdown_flag.load(Relaxed) {
+                let keys = keyboard.get_key_state().unwrap();
+
+                let mut speed = 0.0;
+                let mut whang = 0.0;
+
+                if keys.contains(Key::KEY_W) || keys.contains(Key::KEY_UP) {
+                    speed += self.max_speed;
+                }
+                if keys.contains(Key::KEY_S) || keys.contains(Key::KEY_DOWN) {
+                    speed -= self.max_speed;
+                }
+                if keys.contains(Key::KEY_D) || keys.contains(Key::KEY_RIGHT) {
+                    whang += self.max_whang;
+                }
+                if keys.contains(Key::KEY_A) || keys.contains(Key::KEY_LEFT) {
+                    whang -= self.max_whang;
+                }
+
+                if let Ok(mut mtx) = ctrl_out.write() {
+                    mtx.trans_r = speed;
+                    mtx.rot_r = whang;
+                }
                 thread::sleep(Duration::from_secs_f32(0.01));
             }
         })

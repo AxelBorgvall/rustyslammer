@@ -11,4 +11,8 @@ arc-swap = "1.9" # Thread synced data
 rustc-hash="2.1" # Fast hashmap
 rand = "0.10" # Random numbers
 rand_distr = "0.6"
-device_query="4.0"
+[target.'cfg(target_os = "windows")'.dependencies]
+device_query = "4.0"
+
+[target.'cfg(target_os = "linux")'.dependencies]
+evdev = "0.12"

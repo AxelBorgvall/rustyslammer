@@ -3,7 +3,6 @@ use crate::robo::{
     controller::{CarPath, Controller, PathFollower},
 };
 use arc_swap::ArcSwap;
-use device_query::{DeviceQuery, DeviceState, Keycode};
 use std::{
     f32::consts::PI,
     sync::{
