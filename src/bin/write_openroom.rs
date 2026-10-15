@@ -2,23 +2,10 @@ use minifb::{Key, Window, WindowOptions};
 use std::io::{self,  BufWriter,  Write};
 use std::{cmp, fs::File};
 #[allow(non_upper_case_globals)]
+
 const dx: f32 = 0.05;
 const L: usize = (20.0 / dx) as usize;
 
-#[allow(non_camel_case_types)]
-struct iPoint {
-    x: i32,
-    y: i32,
-}
-
-impl iPoint {
-    fn add(a: &iPoint, b: &iPoint) -> iPoint {
-        iPoint {
-            x: a.x + b.x,
-            y: a.y + b.y,
-        }
-    }
-}
 
 pub fn save_grid(
     path: &str,
@@ -40,15 +27,6 @@ pub fn save_grid(
         writer.write_all(&[val as u8])?;
     }
     Ok(())
-}
-fn draw_rect(grid: &mut Vec<bool>, x0: iPoint, r: iPoint) {
-    let x1 = iPoint::add(&x0, &r);
-
-    for i in cmp::max(x0.x, 0)..cmp::min(x1.x, L as i32) {
-        for j in cmp::max(x0.y, 0)..cmp::min(x1.y, L as i32) {
-            grid[(j as usize) * L + i as usize] = true;
-        }
-    }
 }
 
 fn main() {
@@ -94,5 +72,5 @@ fn main() {
         window.update_with_buffer(&buffer, L, L).unwrap();
     }
 
-    save_grid("data/map1.dat", L as u32, L as u32, dx, &grid).expect("GRAAAAHHHHH");
+    save_grid("data/openroom.dat", L as u32, L as u32, dx, &grid).expect("GRAAAAHHHHH");
 }

@@ -5,6 +5,7 @@ pub mod environment;
 pub mod io;
 pub mod runner;
 pub mod slam;
+pub mod reeds_shepp;
 
 // use std::collections::HashMap;
 use rustc_hash::FxHashMap;
