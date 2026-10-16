@@ -32,12 +32,11 @@ pub fn change_of_basis(p1: RobotPose, p2: RobotPose) -> RobotPose {
     let dy = p2.y - p1.y;
 
     let cos_theta1 = p1.theta.cos();
-    let sin_theta1 = p2.theta.sin();
+    let sin_theta1 = p1.theta.sin();
 
     let x_new = dx * cos_theta1 + dy * sin_theta1;
     let y_new = -dx * sin_theta1 + dy * cos_theta1;
-
-    let theta_new = p2.theta - p1.theta;
+    let theta_new = angle_norm(p2.theta - p1.theta);
 
     RobotPose {
         x: x_new,
@@ -131,19 +130,17 @@ pub const PATH_FNS: [PathFn; 12] = [
 ];
 
 pub fn get_optimal_path(start: RobotPose, end: RobotPose) -> Option<RSPath> {
-    let paths = get_all_paths(start, end);
-
-    paths
+    get_all_paths(start, end)
         .into_iter()
-        .min_by(|a, b| path_length(a).partial_cmp(&path_length(b)).unwrap())
+        .filter(|p| !p.is_empty())
+        .min_by(|a, b| path_length(a).total_cmp(&path_length(b)))
 }
-
 pub fn get_all_paths(start: RobotPose, end: RobotPose) -> ArrayVec<RSPath, 48> {
     let mut paths: ArrayVec<RSPath, 48> = ArrayVec::new();
     let pose = change_of_basis(start, end);
-	let x=pose.x;
-	let y=pose.y;
-	let theta=pose.theta;
+    let x = pose.x;
+    let y = pose.y;
+    let theta = pose.theta;
     for get_path in PATH_FNS {
         let p1 = get_path(x, y, theta);
         let p2 = timeflip(get_path(-x, y, -theta));
@@ -354,6 +351,9 @@ fn path8(x: f32, y: f32, phi: f32) -> RSPath {
 
         let s = sqrt_arg.sqrt();
         let u_param = s - 2.;
+		if u_param<0.{
+			return ArrayVec::new();
+		}
 
         let a = (2.0_f32).atan2(s);
         let t = angle_norm(theta + PI / 2. + a);
@@ -388,6 +388,9 @@ fn path9(x: f32, y: f32, phi: f32) -> RSPath {
 
         let s = sqrt_arg.sqrt();
         let u_param = s - 2.;
+		if u_param<0.{
+			return ArrayVec::new();
+		}
 
         let a = s.atan2(2.0_f32);
         let t = angle_norm(theta + PI / 2. - a);
@@ -475,6 +478,9 @@ fn path12(x: f32, y: f32, phi: f32) -> RSPath {
         let u_base = sqrt_base_arg.sqrt();
         let u_param = u_base - 4.;
 
+		if u_param<0.{
+			return ArrayVec::new();
+		}
         let s_equiv = u_base;
 
         let a = (2.0_f32).atan2(s_equiv);

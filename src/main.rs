@@ -1,8 +1,9 @@
-use crate::robo::{
-    controller::{BasicController, KeyBoardController}, environment::{BasicSimEnv, CarEnv}, runner::SimRunner, slam::OGMapping,
-};
+// use crate::robo::{
+//     controller::{BasicController, KeyBoardController}, environment::{BasicSimEnv, CarEnv}, runner::SimRunner, slam::OGMapping,
+// };
 
-mod robo;
+// mod robo;
+use rustyslammer::{controller::KeyBoardController, environment::CarEnv, runner::SimRunner, slam::OGMapping};
 // fn main() {
 //     let env = BasicSimEnv::new("data/map1.dat");
 //     // let controller = BasicController::default();

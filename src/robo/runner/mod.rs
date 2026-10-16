@@ -4,13 +4,13 @@ pub use sim_runner::*;
 
 
 /* ----------------------------- Rendering stuff ---------------------------- */
-const PANEL_SIZE: usize = 900;
-const WINDOW_WIDTH: usize = PANEL_SIZE * 2;
-const WINDOW_HEIGHT: usize = PANEL_SIZE;
-const BG_DARK: u32 = 0x323232;
-const BG_LIGHT: u32 = 0x7F7F7F;
+pub const PANEL_SIZE: usize = 900;
+pub const WINDOW_WIDTH: usize = PANEL_SIZE * 2;
+pub const WINDOW_HEIGHT: usize = PANEL_SIZE;
+pub const BG_DARK: u32 = 0x323232;
+pub const BG_LIGHT: u32 = 0x7F7F7F;
 
-fn fit_to_canvas(
+pub fn fit_to_canvas(
     src_data: &[u32],
     src_w: usize,
     src_h: usize,

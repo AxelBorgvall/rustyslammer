@@ -258,9 +258,9 @@ pub fn to_world_beam_major<'a>(
 /* ----------------------------- Define ImuState ---------------------------- */
 #[derive(Clone, Copy)]
 pub struct RobotPose {
-    x: f32,
-    y: f32,
-    theta: f32,
+    pub x: f32,
+    pub y: f32,
+    pub theta: f32,
 }
 impl Default for RobotPose {
     fn default() -> Self {
@@ -402,9 +402,9 @@ impl Default for TwoDOFControl {
 /* ------------------------- define screen/rendering ------------------------ */
 
 pub struct EnvImage {
-    height: usize,
-    width: usize,
-    data: Vec<u32>,
+    pub height: usize,
+    pub width: usize,
+    pub data: Vec<u32>,
 }
 
 impl Default for EnvImage {
@@ -418,9 +418,9 @@ impl Default for EnvImage {
 }
 
 pub struct SlamImage {
-    height: usize,
-    width: usize,
-    data: Vec<u32>,
+    pub height: usize,
+    pub width: usize,
+    pub data: Vec<u32>,
 }
 
 impl Default for SlamImage {
