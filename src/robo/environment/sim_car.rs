@@ -107,8 +107,8 @@ impl CarEnv {
             w,
             dx,
             grid,
-            dt: 0.02,
-            seconds_per_iter: 0.02,
+            dt: 0.1,
+            seconds_per_iter: 0.1,
             screenbuffer: vec![0; nh * nw],
         };
 
