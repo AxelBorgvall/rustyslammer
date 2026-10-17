@@ -1,6 +1,6 @@
 use minifb::{Key, Window, WindowOptions};
 use std::io::{self,  BufWriter,  Write};
-use std::{cmp, fs::File};
+use std::{ fs::File};
 #[allow(non_upper_case_globals)]
 
 const dx: f32 = 0.05;

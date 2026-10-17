@@ -1,5 +1,8 @@
+use std::f32::consts::PI;
 use std::fs::File;
 use std::io::{self, BufReader, BufWriter, Read, Write};
+
+use crate::bresenham::{self, Bresenham, CircularBresenham};
 
 pub fn save_grid(path: &str, height: u32, width: u32, dx: f32, data: &[bool]) -> io::Result<()> {
     let file = File::create(path)?;
@@ -46,7 +49,6 @@ pub fn load_data(path: &str) -> io::Result<(u32, u32, f32, Vec<bool>)> {
     Ok((height, width, dx, data))
 }
 
-
 pub fn lerp_rgb(a: u32, b: u32, t: f32) -> u32 {
     let t = t.clamp(0.0, 1.0);
 
@@ -63,4 +65,56 @@ pub fn lerp_rgb(a: u32, b: u32, t: f32) -> u32 {
     let b = (ab + (bb - ab) * t) as u32;
 
     (r << 16) | (g << 8) | b
+}
+
+pub fn draw_circle_segment(
+    buf: &mut Vec<u32>,
+	nw:usize,
+    center: (i32, i32),
+    rad: i32,
+    ang: (f32, f32),
+    color: u32,
+) {
+    let mut bresenham = CircularBresenham::new(center, rad);
+
+    let ax_f = ang.0.cos();
+    let ay_f = ang.0.sin();
+    let bx_f = ang.1.cos();
+    let by_f = ang.1.sin();
+
+    let is_reflex = (ax_f * by_f - ay_f * bx_f) < 0.0;
+
+    // Evil, ugly ass fixed point math (completely unnecassary optimization)
+    let ax = (ax_f * 1024.0) as i32;
+    let ay = (ay_f * 1024.0) as i32;
+    let bx = (bx_f * 1024.0) as i32;
+    let by = (by_f * 1024.0) as i32;
+
+    let is_valid_ang =|p: &(i32, i32)| -> bool {
+        let cross_a = ax * p.1 - ay * p.0;
+        let cross_b = bx * p.1 - by * p.0;
+		if is_reflex{
+			cross_a>=0||cross_b<=0
+		} else {
+			cross_a>=0&&cross_b<=0
+		}
+    };
+
+    for pts in bresenham {
+        pts.iter().filter(|p| is_valid_ang(p)).for_each(|p| {
+			buf[p.0 as usize+nw*(p.1 as usize)]=color;
+		});
+    }
+}
+pub fn draw_line(
+	buf: &mut Vec<u32>,
+	nw:usize,
+	start:(i32,i32),
+	end:(i32,i32),
+	color:u32,
+){
+	let bresenham=Bresenham::new(start,end);
+	for p in bresenham{
+		buf[p.0 as usize+nw*(p.1 as usize)]=color;
+	}
 }

@@ -4,47 +4,7 @@ use arrayvec::ArrayVec;
 
 use crate::robo::RobotPose;
 
-// Util
-
-pub fn angle_norm(theta: f32) -> f32 {
-    let mut theta = theta.rem_euclid(2. * PI);
-    if theta >= PI {
-        theta -= 2. * PI
-    } else if theta < -PI {
-        theta += 2. * PI
-    }
-    theta
-}
-
-pub struct Polar {
-    pub rho: f32,
-    pub theta: f32,
-}
-
-pub fn cartesian_to_polar(x: f32, y: f32) -> Polar {
-    let rho = x.hypot(y);
-    let theta = y.atan2(x);
-    Polar { rho, theta }
-}
-
-pub fn change_of_basis(p1: RobotPose, p2: RobotPose) -> RobotPose {
-    let dx = p2.x - p1.x;
-    let dy = p2.y - p1.y;
-
-    let cos_theta1 = p1.theta.cos();
-    let sin_theta1 = p1.theta.sin();
-
-    let x_new = dx * cos_theta1 + dy * sin_theta1;
-    let y_new = -dx * sin_theta1 + dy * cos_theta1;
-    let theta_new = angle_norm(p2.theta - p1.theta);
-
-    RobotPose {
-        x: x_new,
-        y: y_new,
-        theta: theta_new,
-    }
-}
-
+// Public interface
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum Steer {
     Left,
@@ -103,7 +63,98 @@ impl Segment {
 
 pub type RSPath = ArrayVec<Segment, 5>;
 
-pub fn timeflip(path: RSPath) -> RSPath {
+pub fn path_length(path: &RSPath) -> f32 {
+    path.iter().map(|e| e.param.abs()).sum()
+}
+
+pub fn optimal_reeds_shepp(
+    start: RobotPose,
+    end: RobotPose,
+    turning_radius: f32,
+) -> Option<RSPath> {
+    let norm_start = RobotPose {
+        x: start.x / turning_radius,
+        y: start.y / turning_radius,
+        theta: start.theta,
+    };
+    let norm_end = RobotPose {
+        x: end.x / turning_radius,
+        y: end.y / turning_radius,
+        theta: end.theta,
+    };
+
+    match get_optimal_path(norm_start, norm_end) {
+        Some(mut path) => {
+            unnorm_path(&mut path, turning_radius);
+            Some(path)
+        }
+        None => None,
+    }
+}
+pub fn all_reeds_shepp(
+    start: RobotPose,
+    end: RobotPose,
+    turning_radius: f32,
+) -> ArrayVec<RSPath, 48> {
+    let norm_start = RobotPose {
+        x: start.x / turning_radius,
+        y: start.y / turning_radius,
+        theta: start.theta,
+    };
+    let norm_end = RobotPose {
+        x: end.x / turning_radius,
+        y: end.y / turning_radius,
+        theta: end.theta,
+    };
+    let mut paths = get_all_paths(norm_start, norm_end);
+    paths
+        .iter_mut()
+        .for_each(|path| unnorm_path(path, turning_radius));
+    paths
+}
+
+// Private functions
+fn unnorm_path(path: &mut RSPath, r: f32) {
+    path.iter_mut().for_each(|segment| segment.param *= r);
+}
+fn angle_norm(theta: f32) -> f32 {
+    let mut theta = theta.rem_euclid(2. * PI);
+    if theta >= PI {
+        theta -= 2. * PI
+    }
+    theta
+}
+
+struct Polar {
+    pub rho: f32,
+    pub theta: f32,
+}
+
+fn cartesian_to_polar(x: f32, y: f32) -> Polar {
+    let rho = x.hypot(y);
+    let theta = y.atan2(x);
+    Polar { rho, theta }
+}
+
+fn change_of_basis(p1: RobotPose, p2: RobotPose) -> RobotPose {
+    let dx = p2.x - p1.x;
+    let dy = p2.y - p1.y;
+
+    let cos_theta1 = p1.theta.cos();
+    let sin_theta1 = p1.theta.sin();
+
+    let x_new = dx * cos_theta1 + dy * sin_theta1;
+    let y_new = -dx * sin_theta1 + dy * cos_theta1;
+    let theta_new = angle_norm(p2.theta - p1.theta);
+
+    RobotPose {
+        x: x_new,
+        y: y_new,
+        theta: theta_new,
+    }
+}
+
+fn timeflip(path: RSPath) -> RSPath {
     path.into_iter()
         .map(|mut e| {
             e.reverse_gear();
@@ -112,7 +163,7 @@ pub fn timeflip(path: RSPath) -> RSPath {
         .collect()
 }
 
-pub fn reflect(path: RSPath) -> RSPath {
+fn reflect(path: RSPath) -> RSPath {
     path.into_iter()
         .map(|mut e| {
             e.reverse_steer();
@@ -121,39 +172,40 @@ pub fn reflect(path: RSPath) -> RSPath {
         .collect()
 }
 
-pub fn path_length(path: &RSPath) -> f32 {
+fn path_param_length(path: &RSPath) -> f32 {
     path.iter().map(|e| e.param.abs()).sum()
 }
-pub type PathFn = fn(f32, f32, f32) -> RSPath;
-pub const PATH_FNS: [PathFn; 12] = [
+type PathFn = fn(f32, f32, f32) -> RSPath;
+const PATH_FNS: [PathFn; 12] = [
     path1, path2, path3, path4, path5, path6, path7, path8, path9, path10, path11, path12,
 ];
 
-pub fn get_optimal_path(start: RobotPose, end: RobotPose) -> Option<RSPath> {
-    get_all_paths(start, end)
-        .into_iter()
-        .filter(|p| !p.is_empty())
-        .min_by(|a, b| path_length(a).total_cmp(&path_length(b)))
+fn get_optimal_path(start: RobotPose, end: RobotPose) -> Option<RSPath> {
+    iter_paths(start, end).min_by(|a, b| {
+        let la = path_param_length(a);
+        let lb = path_param_length(b);
+        la.is_nan()
+            .cmp(&lb.is_nan())
+            .then_with(|| la.total_cmp(&lb))
+    })
 }
-pub fn get_all_paths(start: RobotPose, end: RobotPose) -> ArrayVec<RSPath, 48> {
-    let mut paths: ArrayVec<RSPath, 48> = ArrayVec::new();
+fn iter_paths(start: RobotPose, end: RobotPose) -> impl Iterator<Item = RSPath> {
     let pose = change_of_basis(start, end);
-    let x = pose.x;
-    let y = pose.y;
-    let theta = pose.theta;
-    for get_path in PATH_FNS {
-        let p1 = get_path(x, y, theta);
-        let p2 = timeflip(get_path(-x, y, -theta));
-        let p3 = reflect(get_path(x, -y, -theta));
-        let p4 = reflect(timeflip(get_path(-x, -y, theta)));
-
-        paths.push(p1);
-        paths.push(p2);
-        paths.push(p3);
-        paths.push(p4);
-    }
-
-    paths
+    let (x, y, theta) = (pose.x, pose.y, pose.theta);
+    PATH_FNS
+        .into_iter()
+        .flat_map(move |get_path| {
+            [
+                get_path(x, y, theta),
+                timeflip(get_path(-x, y, -theta)),
+                reflect(get_path(x, -y, -theta)),
+                reflect(timeflip(get_path(-x, -y, theta))),
+            ]
+        })
+        .filter(|p| !p.is_empty())
+}
+fn get_all_paths(start: RobotPose, end: RobotPose) -> ArrayVec<RSPath, 48> {
+    iter_paths(start, end).collect()
 }
 
 fn path1(x: f32, y: f32, phi: f32) -> RSPath {
@@ -254,7 +306,7 @@ fn path5(x: f32, y: f32, phi: f32) -> RSPath {
 
     if rho <= 4. {
         let u = (1. - rho * rho / 8.).acos();
-        let a = (2. * u.sin() / rho).asin();
+        let a = (2. * u.sin() / rho).clamp(-1.0, 1.0).asin();
         let t = angle_norm(theta + PI / 2. - a);
         let v = angle_norm(t - u - phi);
 
@@ -317,8 +369,7 @@ fn path7(x: f32, y: f32, phi: f32) -> RSPath {
 
     if rho <= 6. && (0. ..=1.).contains(&u1) {
         let u = u1.acos();
-        let asin_arg = (2. * u.sin() / rho).clamp(-1.0, 1.0);
-        let a = asin_arg.asin();
+        let a = (2. * u.sin() / rho).clamp(-1.0, 1.0).asin();
         let t = angle_norm(theta + PI / 2. + a);
         let v = angle_norm(t - phi);
 
@@ -351,9 +402,9 @@ fn path8(x: f32, y: f32, phi: f32) -> RSPath {
 
         let s = sqrt_arg.sqrt();
         let u_param = s - 2.;
-		if u_param<0.{
-			return ArrayVec::new();
-		}
+        if u_param < 0. {
+            return ArrayVec::new();
+        }
 
         let a = (2.0_f32).atan2(s);
         let t = angle_norm(theta + PI / 2. + a);
@@ -388,9 +439,9 @@ fn path9(x: f32, y: f32, phi: f32) -> RSPath {
 
         let s = sqrt_arg.sqrt();
         let u_param = s - 2.;
-		if u_param<0.{
-			return ArrayVec::new();
-		}
+        if u_param < 0. {
+            return ArrayVec::new();
+        }
 
         let a = s.atan2(2.0_f32);
         let t = angle_norm(theta + PI / 2. - a);
@@ -478,9 +529,9 @@ fn path12(x: f32, y: f32, phi: f32) -> RSPath {
         let u_base = sqrt_base_arg.sqrt();
         let u_param = u_base - 4.;
 
-		if u_param<0.{
-			return ArrayVec::new();
-		}
+        if u_param < 0. {
+            return ArrayVec::new();
+        }
         let s_equiv = u_base;
 
         let a = (2.0_f32).atan2(s_equiv);

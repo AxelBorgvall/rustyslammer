@@ -1,5 +1,5 @@
 use crate::robo::environment::Environment;
-use crate::robo::{EnvImage, LidarScan, RobotPose, TwoDOFControl, bresenham::Bresenham, io};
+use crate::robo::{EnvImage, LidarScan, RobotPose, TwoDOFControl, bresenham::Bresenham, util};
 use crate::robo::{ScanPoints, to_world, world2cell};
 use rand::Rng;
 use rand::rngs::ThreadRng;
@@ -75,7 +75,7 @@ fn checkaround(grid: &Vec<bool>, nh: usize, nw: usize, x: usize, y: usize, rad: 
 impl BasicSimEnv {
     pub fn new(path: &str) -> Self {
         let (nh, nw, dx, grid) =
-            io::load_data(path).expect("Failed to load the Map from the path specified.");
+            util::load_data(path).expect("Failed to load the Map from the path specified.");
         let nh = nh as usize;
         let nw = nw as usize;
 

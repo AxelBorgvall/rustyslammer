@@ -1,4 +1,4 @@
-use crate::robo::io::lerp_rgb;
+use crate::robo::util::lerp_rgb;
 use crate::robo::{CHUNK_L, CHUNK_SIZE, ChunkCache, ScanPoints, to_world_beam_major};
 use crate::robo::{
     LidarScan, Map, RobotPose, SlamImage, bresenham::Bresenham, to_world, world2cell,

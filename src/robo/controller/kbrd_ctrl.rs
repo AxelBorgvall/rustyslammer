@@ -89,6 +89,20 @@ impl Controller for KeyBoardController {
 
         thread::spawn(move || {
             // Find the first device that has a 'W' key (filters out mice/power buttons)
+
+            // let devices: Vec<_> = evdev::enumerate().collect();
+            // println!("Total evdev devices readable: {}", devices.len());
+            // for (path, dev) in &devices {
+            //     println!(
+            //         "Device: {:?} | Name: {:?} | Has KEY_W: {}",
+            //         path,
+            //         dev.name(),
+            //         dev.supported_keys()
+            //             .map_or(false, |k| k.contains(evdev::Key::KEY_W))
+            //     );
+            // }
+            // panic!();
+
             let mut keyboard = evdev::enumerate()
                 .find(|(_, dev)| {
                     dev.supported_keys()
@@ -96,7 +110,6 @@ impl Controller for KeyBoardController {
                 })
                 .map(|(_, dev)| dev)
                 .expect("No keyboard found in /dev/input!");
-
             while !shutdown_flag.load(Relaxed) {
                 let keys = keyboard.get_key_state().unwrap();
 

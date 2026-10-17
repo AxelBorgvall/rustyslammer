@@ -2,7 +2,7 @@
 pub mod bresenham;
 pub mod controller;
 pub mod environment;
-pub mod io;
+pub mod util;
 pub mod runner;
 pub mod slam;
 pub mod reeds_shepp;

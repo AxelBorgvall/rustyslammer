@@ -15,7 +15,7 @@ use rand_distr::{Distribution, Normal};
 
 use crate::robo::{
     EnvImage, LidarScan, Pos, RobotPose, ScanPoints, TwoDOFControl, bresenham::Bresenham,
-    environment::Environment, io, to_world, world2cell,
+    environment::Environment, util, to_world, world2cell,
 };
 
 pub struct CarEnv {
@@ -60,7 +60,7 @@ pub struct CarEnv {
 impl CarEnv {
     pub fn new(path: &str) -> Self {
         let (nh, nw, dx, grid) =
-            io::load_data(path).expect("Failed to load the Map from the path specified.");
+            util::load_data(path).expect("Failed to load the Map from the path specified.");
         let nh = nh as usize;
         let nw = nw as usize;
         let w = nw as f32 * dx;
