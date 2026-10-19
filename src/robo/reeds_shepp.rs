@@ -114,8 +114,12 @@ pub fn all_reeds_shepp(
 }
 
 // Private functions
-fn unnorm_path(path: &mut RSPath, r: f32) {
+pub fn unnorm_path(path: &mut RSPath, r: f32) {
     path.iter_mut().for_each(|segment| segment.param *= r);
+}
+pub fn norm_path(path:&mut RSPath,r:f32){
+	let fac=1./r;
+    path.iter_mut().for_each(|segment| segment.param *= fac);
 }
 fn angle_norm(theta: f32) -> f32 {
     let mut theta = theta.rem_euclid(2. * PI);

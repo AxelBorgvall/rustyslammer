@@ -1,4 +1,3 @@
-
 #[derive(Clone, Copy)]
 pub struct Bresenham {
     x: i32,
@@ -14,6 +13,8 @@ pub struct Bresenham {
 
 impl Bresenham {
     pub fn new(start: (i32, i32), end: (i32, i32)) -> Self {
+        let dx = (start.0 - end.0).abs();
+        let dy = -(start.1 - end.1).abs();
         Self {
             x: start.0,
             y: start.1,
@@ -23,7 +24,7 @@ impl Bresenham {
             dy: -(start.1 - end.1).abs(),
             sx: if start.0 < end.0 { 1 } else { -1 },
             sy: if start.1 < end.1 { 1 } else { -1 },
-            err: (start.0 - end.0).abs() - (start.1 - end.1).abs(),
+            err: dx + dy,
         }
     }
 }
@@ -32,10 +33,16 @@ impl Iterator for Bresenham {
     type Item = (i32, i32);
 
     fn next(&mut self) -> Option<Self::Item> {
+		if self.sx==0 && self.sy==0{
+			return None;
+		}
+
         let current = (self.x, self.y);
 
         if self.x == self.end_x && self.y == self.end_y {
-            return None;
+			self.sx=0;
+			self.sy=0;
+            return Some(current);
         }
 
         let e2 = 2 * self.err;
@@ -62,8 +69,8 @@ pub struct CircularBresenham {
 }
 
 impl CircularBresenham {
-    pub fn new(center:(i32,i32), r: i32) -> Self {
-		let (xc,yc)=center;
+    pub fn new(center: (i32, i32), r: i32) -> Self {
+        let (xc, yc) = center;
         Self {
             xc,
             yc,
@@ -77,29 +84,29 @@ impl CircularBresenham {
 
 impl Iterator for CircularBresenham {
     type Item = [(i32, i32); 8];
-	fn next(&mut self) -> Option<Self::Item> {
-		if self.x<=self.y{
-			let arr:[(i32,i32);8]=[
-				(self.xc+self.x,self.yc+self.y),
-				(self.xc-self.x,self.yc+self.y),
-				(self.xc+self.x,self.yc-self.y),
-				(self.xc-self.x,self.yc-self.y),
-				(self.xc+self.y,self.yc+self.x),
-				(self.xc-self.y,self.yc+self.x),
-				(self.xc+self.y,self.yc-self.x),
-				(self.xc-self.y,self.yc-self.x),
-			];
-			self.x+=1;
-			if self.d<0{
-				self.d=self.d+4*self.x+6;
-			}else {
-				self.y-=1;
-				self.d=self.d+4*(self.x-self.y)+10;
-			}
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.x <= self.y {
+            let arr: [(i32, i32); 8] = [
+                (self.xc + self.x, self.yc + self.y),
+                (self.xc - self.x, self.yc + self.y),
+                (self.xc + self.x, self.yc - self.y),
+                (self.xc - self.x, self.yc - self.y),
+                (self.xc + self.y, self.yc + self.x),
+                (self.xc - self.y, self.yc + self.x),
+                (self.xc + self.y, self.yc - self.x),
+                (self.xc - self.y, self.yc - self.x),
+            ];
+            self.x += 1;
+            if self.d < 0 {
+                self.d = self.d + 4 * self.x + 6;
+            } else {
+                self.y -= 1;
+                self.d = self.d + 4 * (self.x - self.y) + 10;
+            }
 
-			Some(arr)
-		}else{
-			None
-		}
-	}
+            Some(arr)
+        } else {
+            None
+        }
+    }
 }

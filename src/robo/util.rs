@@ -2,7 +2,9 @@ use std::f32::consts::PI;
 use std::fs::File;
 use std::io::{self, BufReader, BufWriter, Read, Write};
 
+use crate::RobotPose;
 use crate::bresenham::{self, Bresenham, CircularBresenham};
+use crate::reeds_shepp::{Gear, RSPath, Steer};
 
 pub fn save_grid(path: &str, height: u32, width: u32, dx: f32, data: &[bool]) -> io::Result<()> {
     let file = File::create(path)?;
@@ -67,6 +69,96 @@ pub fn lerp_rgb(a: u32, b: u32, t: f32) -> u32 {
     (r << 16) | (g << 8) | b
 }
 
+fn to_px(x: f32, y: f32, dx: f32) -> (i32, i32) {
+    ((x / dx).floor() as i32, (y / dx).floor() as i32)
+}
+
+fn draw_px(buf: &mut [u32], w: usize, h: usize, x: i32, y: i32, color: u32) {
+    if x >= 0 && y >= 0 && (x as usize) < w && (y as usize) < h {
+        buf[x as usize + y as usize * w] = color;
+    }
+}
+pub fn draw_path(
+    path: &RSPath,
+    buf: &mut [u32],
+    h: usize,
+    w: usize,
+    dx: f32,
+    start_pose: RobotPose,
+    turning_rad: f32,
+    fwd_color: u32,
+    reverse_color: u32,
+) {
+    let mut pose = start_pose;
+
+    for seg in path {
+        if seg.param <= 1e-6 {
+            continue;
+        }
+
+        let s = match seg.gear {
+            Gear::Forward => seg.param,
+            Gear::Reverse => -seg.param,
+        };
+
+        let color = match seg.gear {
+            Gear::Forward => fwd_color,
+            Gear::Reverse => reverse_color,
+        };
+
+        let k = match seg.steer {
+            Steer::Left => 1.0 / turning_rad,
+            Steer::Right => -1.0 / turning_rad,
+            Steer::Straight => 0.0,
+        };
+
+        let steps = ((seg.param / (0.5 * dx)).ceil() as usize).max(1);
+        let mut prev_px = to_px(pose.x, pose.y, dx);
+
+        for i in 1..=steps {
+            let d = s * (i as f32 / steps as f32);
+            let theta = pose.theta + k * d;
+
+            let next = if k == 0.0 {
+                RobotPose {
+                    x: pose.x + d * pose.theta.cos(),
+                    y: pose.y + d * pose.theta.sin(),
+                    theta: pose.theta,
+                }
+            } else {
+                RobotPose {
+                    x: pose.x + (theta.sin() - pose.theta.sin()) / k,
+                    y: pose.y + (pose.theta.cos() - theta.cos()) / k,
+                    theta,
+                }
+            };
+
+            let next_px = to_px(next.x, next.y, dx);
+
+            for (x, y) in Bresenham::new(prev_px, next_px) {
+                draw_px(buf, w, h, x, y, color);
+            }
+            draw_px(buf, w, h, next_px.0, next_px.1, color);
+
+            prev_px = next_px;
+        }
+
+        let theta = pose.theta + k * s;
+        pose = if k == 0.0 {
+            RobotPose {
+                x: pose.x + s * pose.theta.cos(),
+                y: pose.y + s * pose.theta.sin(),
+                theta: pose.theta,
+            }
+        } else {
+            RobotPose {
+                x: pose.x + (theta.sin() - pose.theta.sin()) / k,
+                y: pose.y + (pose.theta.cos() - theta.cos()) / k,
+                theta,
+            }
+        };
+    }
+}
 pub fn draw_circle_segment(
     buf: &mut Vec<u32>,
 	nw:usize,
