@@ -54,12 +54,15 @@ pub fn world2cell(x: f32, y: f32, dx: f32) -> (i32, i32) {
 
 const CHUNK_L: usize = 32;
 const CHUNK_SIZE: usize = CHUNK_L * CHUNK_L;
-pub type Chunk = [Cell; CHUNK_SIZE];
-pub type Map = FxHashMap<(i32, i32), Arc<Chunk>>;
+pub type SlamChunk = [Cell; CHUNK_SIZE];
+pub type Map = FxHashMap<(i32, i32), Arc<SlamChunk>>;
+
+
+// pub type NumChunk=[]
 
 pub struct ChunkCache<const N: usize> {
     keys: [(i32, i32); N],
-    ptrs: [*mut Chunk; N],
+    ptrs: [*mut SlamChunk; N],
     next: usize,
 }
 impl<const N: usize> ChunkCache<N> {
@@ -71,7 +74,7 @@ impl<const N: usize> ChunkCache<N> {
         }
     }
     #[inline]
-    fn get_mut(&mut self, map: &mut Map, key: (i32, i32)) -> *mut Chunk {
+    fn get_mut(&mut self, map: &mut Map, key: (i32, i32)) -> *mut SlamChunk {
         for i in 0..N {
             if self.keys[i] == key {
                 return self.ptrs[i];
@@ -89,7 +92,7 @@ impl<const N: usize> ChunkCache<N> {
     }
 
     #[inline]
-    fn get(&mut self, map: &mut Map, key: (i32, i32)) -> *const Chunk {
+    fn get(&mut self, map: &mut Map, key: (i32, i32)) -> *const SlamChunk {
         for i in 0..N {
             if self.keys[i] == key {
                 return self.ptrs[i];
@@ -256,7 +259,7 @@ pub fn to_world_beam_major<'a>(
 }
 
 /* ----------------------------- Define ImuState ---------------------------- */
-#[derive(Clone, Copy)]
+#[derive(Debug,Clone, Copy,PartialEq)]
 pub struct RobotPose {
     pub x: f32,
     pub y: f32,

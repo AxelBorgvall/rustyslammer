@@ -60,7 +60,7 @@ pub struct CarEnv {
 impl CarEnv {
     pub fn new(path: &str) -> Self {
         let (nh, nw, dx, grid) =
-            util::load_data(path).expect("Failed to load the Map from the path specified.");
+            util::load_mapgrid(path).expect("Failed to load the Map from the path specified.");
         let nh = nh as usize;
         let nw = nw as usize;
         let w = nw as f32 * dx;

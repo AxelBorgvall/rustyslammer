@@ -1,4 +1,4 @@
-use std::{f32::consts::PI };
+use std::{f32::consts::PI, time::Instant };
 
 use minifb::{Key, Window, WindowOptions};
 use rustyslammer::{
@@ -43,10 +43,11 @@ fn draw_reeds_shepp(
     for (i, j) in Bresenham::new((ex, ey), nose_tip) {
         put(buf, w, h, i, j, BLACK);
     }
-
+	let now=Instant::now();
     let Some(path) = optimal_reeds_shepp(start, end, turning_rad) else {
         return;
     };
+	println!("Computed rs in: {} ns",now.elapsed().as_nanos());
 	
 	draw_path(&path, &mut *buf, h, w, dx, start, turning_rad, FORWARD_COLOR, REVERSE_COLOR);
 

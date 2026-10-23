@@ -1,12 +1,13 @@
 use std::f32::consts::PI;
 use std::fs::File;
-use std::io::{self, BufReader, BufWriter, Read, Write};
+use std::io::{self, BufReader, BufWriter, Error, ErrorKind, Read, Write};
 
 use crate::RobotPose;
 use crate::bresenham::{self, Bresenham, CircularBresenham};
+use crate::controller::{CHUNK_L, NMap};
 use crate::reeds_shepp::{Gear, RSPath, Steer};
 
-pub fn save_grid(path: &str, height: u32, width: u32, dx: f32, data: &[bool]) -> io::Result<()> {
+pub fn save_mapgrid(path: &str, height: u32, width: u32, dx: f32, data: &[bool]) -> io::Result<()> {
     let file = File::create(path)?;
     let mut writer = BufWriter::new(file);
 
@@ -19,10 +20,11 @@ pub fn save_grid(path: &str, height: u32, width: u32, dx: f32, data: &[bool]) ->
     for &val in data {
         writer.write_all(&[val as u8])?;
     }
+    writer.flush()?;
     Ok(())
 }
 
-pub fn load_data(path: &str) -> io::Result<(u32, u32, f32, Vec<bool>)> {
+pub fn load_mapgrid(path: &str) -> io::Result<(u32, u32, f32, Vec<bool>)> {
     let file = File::open(path)?;
     let mut reader = BufReader::new(file);
     let mut buf_4 = [0u8; 4];
@@ -49,6 +51,69 @@ pub fn load_data(path: &str) -> io::Result<(u32, u32, f32, Vec<bool>)> {
     }
 
     Ok((height, width, dx, data))
+}
+
+pub fn save_nmap(path: &str, map: &NMap, dx: f32, l_chunk: usize) -> io::Result<()> {
+    let n_chunks = map.len();
+    let file = File::create(path)?;
+    let mut writer = BufWriter::new(file);
+    writer.write_all(&(n_chunks as u64).to_le_bytes())?;
+    writer.write_all(&dx.to_le_bytes())?;
+    writer.write_all(&(l_chunk as u64).to_le_bytes())?;
+
+    for (key, slice) in map.iter() {
+        writer.write_all(&key.0.to_le_bytes())?;
+        writer.write_all(&key.1.to_le_bytes())?;
+        for &val in slice.iter() {
+            writer.write_all(&val.to_le_bytes())?;
+        }
+    }
+    writer.flush()?;
+    Ok(())
+}
+
+pub fn load_nmap(path: &str) -> io::Result<(usize, usize, f32, NMap)> {
+    let file = File::open(path)?;
+    let mut reader = BufReader::new(file);
+    let mut buf_4 = [0u8; 4];
+    let mut buf_8 = [0u8; 8];
+
+    reader.read_exact(&mut buf_8)?;
+    let n_chunks = u64::from_le_bytes(buf_8) as usize;
+
+    reader.read_exact(&mut buf_4)?;
+    let dx = f32::from_le_bytes(buf_4);
+
+    // Read and check chunmksize
+    reader.read_exact(&mut buf_8)?;
+    let l_chunk = u64::from_le_bytes(buf_8) as usize;
+    if l_chunk != crate::controller::CHUNK_L {
+        return Err(Error::new(
+            ErrorKind::InvalidData,
+            format!(
+                "Chunk size mismatch: expected {}, got {}",
+                crate::controller::CHUNK_L,
+                l_chunk
+            ),
+        ));
+    }
+
+    let mut map = NMap::default();
+    for _ in 0..n_chunks {
+        let mut key = (0, 0);
+        reader.read_exact(&mut buf_4)?;
+        key.0 = i32::from_le_bytes(buf_4);
+        reader.read_exact(&mut buf_4)?;
+        key.1 = i32::from_le_bytes(buf_4);
+        let mut chunk = [0.0f32; CHUNK_L * CHUNK_L];
+        for val in &mut chunk {
+            reader.read_exact(&mut buf_4)?;
+            *val = f32::from_le_bytes(buf_4);
+        }
+        map.insert(key, chunk);
+    }
+
+    Ok((n_chunks, l_chunk, dx, map))
 }
 
 pub fn lerp_rgb(a: u32, b: u32, t: f32) -> u32 {
@@ -161,7 +226,7 @@ pub fn draw_path(
 }
 pub fn draw_circle_segment(
     buf: &mut Vec<u32>,
-	nw:usize,
+    nw: usize,
     center: (i32, i32),
     rad: i32,
     ang: (f32, f32),
@@ -182,31 +247,25 @@ pub fn draw_circle_segment(
     let bx = (bx_f * 1024.0) as i32;
     let by = (by_f * 1024.0) as i32;
 
-    let is_valid_ang =|p: &(i32, i32)| -> bool {
+    let is_valid_ang = |p: &(i32, i32)| -> bool {
         let cross_a = ax * p.1 - ay * p.0;
         let cross_b = bx * p.1 - by * p.0;
-		if is_reflex{
-			cross_a>=0||cross_b<=0
-		} else {
-			cross_a>=0&&cross_b<=0
-		}
+        if is_reflex {
+            cross_a >= 0 || cross_b <= 0
+        } else {
+            cross_a >= 0 && cross_b <= 0
+        }
     };
 
     for pts in bresenham {
         pts.iter().filter(|p| is_valid_ang(p)).for_each(|p| {
-			buf[p.0 as usize+nw*(p.1 as usize)]=color;
-		});
+            buf[p.0 as usize + nw * (p.1 as usize)] = color;
+        });
     }
 }
-pub fn draw_line(
-	buf: &mut Vec<u32>,
-	nw:usize,
-	start:(i32,i32),
-	end:(i32,i32),
-	color:u32,
-){
-	let bresenham=Bresenham::new(start,end);
-	for p in bresenham{
-		buf[p.0 as usize+nw*(p.1 as usize)]=color;
-	}
+pub fn draw_line(buf: &mut Vec<u32>, nw: usize, start: (i32, i32), end: (i32, i32), color: u32) {
+    let bresenham = Bresenham::new(start, end);
+    for p in bresenham {
+        buf[p.0 as usize + nw * (p.1 as usize)] = color;
+    }
 }
